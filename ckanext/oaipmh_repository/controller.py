@@ -2,6 +2,8 @@
 '''
 import logging
 
+import requests
+
 from ckan.lib.base import BaseController, render
 from pylons import request, response
 
@@ -19,5 +21,10 @@ class OAIPMHController(BaseController):
             verb = request.params['verb'] if request.params['verb'] else None
             if verb:
                 log.debug('verb: %s', verb)
+                url_base =  'http://envidat01.wsl.ch:8080/oai-pmh-rest-0.1.0/oai?'
+                url = url_base+request.url.split('?')[1]
+                r = requests.get(url)
+                return(r.content)
+
         #else:
         return render('oaipmh_repository/oaipmh_repository.html')
