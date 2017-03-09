@@ -1,0 +1,13 @@
+{% extends "page.html" %}
+{% block subtitle %}{{ _('OAI-PMH interface') }}{% endblock %}
+
+{% block main_content %}
+    <h1>{{ _('OAI-PMH repository inteface') }}</h1>
+    {% trans %}
+        <p>OAI-PMH inteface for datasets and organizations.</p>
+        <p>Example: <a href="/oai?verb=Identify">oai?verb=Identify</a>.</p>
+        <p>Example: <a href="/oai?verb=ListRecords&metadataPrefix=oai_dc">oai?verb=ListRecords&metadataPrefix=oai_dc</a>.</p>
+        <p>More information about OAI-PMH interface at <a href="http://www.openarchives.org/pmh/">http://www.openarchives.org/pmh/</a>.</p>
+    {% endtrans %}
+{% endblock %}
+{% block sidebar %}{% endblock %}
