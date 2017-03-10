@@ -24,6 +24,8 @@ class OAIPMHController(BaseController):
                 url_base =  'http://envidat01.wsl.ch:8080/oai-pmh-rest-0.1.0/oai?'
                 url = url_base+request.url.split('?')[1]
                 r = requests.get(url)
+                response.content_type = 'text/xml'
+                response.headers['content-type'] = 'text/xml; charset=utf-8'
                 return(r.content)
 
         #else:
