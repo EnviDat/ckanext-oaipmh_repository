@@ -25,7 +25,7 @@ class OAIPMHController(BaseController):
                 url = url_base+request.url.split('?')[1]
                 r = requests.get(url)
                 response.content_type = 'text/xml'
-                response.headers['content-type'] = 'text/xml; charset=utf-8'
+                response.headers['content-type'] = 'text/xml; charset=UTF-8'
                 return(r.content)
 
         #else:
