@@ -5,6 +5,8 @@ from datetime import datetime
 from xmltodict import unparse
 import collections
 
+from ckanext.package_converter.model.metadata_format import MetadataFormats, XMLMetadataFormat
+
 from logging import getLogger
 log = getLogger(__name__)
 
@@ -28,7 +30,7 @@ class OAIPMHRepository(object):
             handler = self.bad_verb
         content = handler(params)
         xmldict = self._envelop(verb, params, url, content)
-        return unparse(xmldict)
+        return unparse(xmldict, pretty=True)
 
     def bad_verb(self, params):
         return {'@code':'badVerb', '#text': 'Illegal OAI verb' }
@@ -52,7 +54,18 @@ class OAIPMHRepository(object):
         return {'#text': 'list_identifiers: implementation pending' }
         
     def list_metadata_formats(self, params):
-        return {'#text': 'list_identifiers: implementation pending' }
+        # return all the XML formats
+        metadata_formats = MetadataFormats().get_all_metadata_formats()
+        formats_dict = collections.OrderedDict()
+        formats_dict['metadataFormat'] = []
+        for metadata_format in metadata_formats:
+            if issubclass(type(metadata_format), XMLMetadataFormat):
+                format_dict = collections.OrderedDict()
+                format_dict['metadataPrefix'] = metadata_format.get_format_name()
+                format_dict['schema'] = metadata_format.get_xsd_url()
+                format_dict['metadataNamespace'] = metadata_format.get_namespace()
+                formats_dict['metadataFormat'] += [format_dict]
+        return formats_dict
         
     def list_records(self, params):
         return {'#text': 'list_records: implementation pending' }
@@ -70,7 +83,8 @@ class OAIPMHRepository(object):
         oaipmh_dict['OAI-PMH']['@xsi:schemaLocation'] = 'http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd'
 
         oaipmh_dict['OAI-PMH']['responseDate'] = datetime.now().strftime(self.dateformat) #'2017-02-08T12:00:01Z'
-        oaipmh_dict['OAI-PMH']['request'] = {'@verb':verb, '#text':str(url)}
+        oaipmh_dict['OAI-PMH']['request'] = {'@verb':verb, '#text':str(url).split('?')[0] }
+
         if len(params)>1:
             for param in params:
                 if param != 'verb':
