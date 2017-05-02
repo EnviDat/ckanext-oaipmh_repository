@@ -35,7 +35,7 @@ class OAIPMHRepository(object):
     def bad_verb(self, params):
         return {'@code':'badVerb', '#text': 'Illegal OAI verb' }
         
-    def identify(self, params):
+    def identify(self, params={}):
         identify_dict = collections.OrderedDict()
         identify_dict['repositoryName'] = config.get('site.title') if config.get('site.title') else 'repository'
         identify_dict['baseURL'] = url_for(controller='ckanext.oaipmh_repository.controller:OAIPMHController', action='index')
