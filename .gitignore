@@ -45,4 +45,4 @@ docs/_build/
 .DS_Store
 
 # Temporary Nano files
-.py.swp
+.*.py.swp
