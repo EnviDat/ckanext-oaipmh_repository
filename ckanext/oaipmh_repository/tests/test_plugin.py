@@ -51,11 +51,15 @@ class TestPackageConverter(object):
         ckan.plugins.unload('oaipmh_repository')
 
     def test_identify(self):
-        identify_content = OAIPMHRepository().handle_request('Identify', {}, 'REQUEST_URL')
-        log.info(identify_content)
-        #Add metadata format oai-pmh(2.0),  http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd
-        identify_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], identify_content)
-        log.info(identify_record)
+        request_content = OAIPMHRepository().handle_request('Identify', {}, 'REQUEST_URL')
+        oaipmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], request_content)
         # validate the XML
-        assert_true(identify_record.validate())
+        assert_true(oaipmh_record.validate())
+
+    def test_list_metadata_formats(self):
+        request_content = OAIPMHRepository().handle_request('ListMetadataFormats', {}, 'REQUEST_URL')
+        oaipmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], request_content)
+        # validate the XML
+        assert_true(oaipmh_record.validate())
+
 

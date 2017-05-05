@@ -7,6 +7,8 @@ import collections
 
 from ckanext.package_converter.model.metadata_format import MetadataFormats, XMLMetadataFormat
 
+from record_access import RecordAccessService
+
 from logging import getLogger
 log = getLogger(__name__)
 
@@ -22,6 +24,7 @@ class OAIPMHRepository(object):
             'ListRecords': self.list_records,
             'ListSets': self.list_sets
         }
+        self.record_access = RecordAccessService(self.dateformat, 'oai:envidat.ch:')
 
     def handle_request(self, verb, params, url):
         handler = self.verb_handlers.get(verb)
@@ -47,7 +50,9 @@ class OAIPMHRepository(object):
         return identify_dict
 
     def get_record(self, params):
-        return {'#text': 'get_record: implementation pending' }
+        log.debug(params)
+        return(self.record_access.getRecord(params.get('identifier', 'NONE'), params.get('metadataPrefix', 'NOMF')))
+#       return {'#text': 'get_record: implementation pending' }
 
     def list_identifiers(self, params):
         return {'#text': 'list_identifiers: implementation pending' }
