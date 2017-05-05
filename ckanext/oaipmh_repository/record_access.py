@@ -16,20 +16,27 @@ class RecordAccessService(object):
     def __init__(self, dateformat, id_prefix):
         self.dateformat = dateformat
         self.id_prefix = id_prefix
-
+#<error code="idDoesNotExist">Identifier not found in this repository.</error>
+#<error code="cannotDisseminateFormat">The metadata format identified by the value given for the metadataPrefix argument is not supported by the item or by the repository.</error>
     def getRecord(self, identifier, format):
         # Get record
         doi = self._get_DOI(identifier)
-        log.debug('********** getting DOI ' + doi + ' ************')
+        log.debug(' * get by DOI ' + doi )
         result = self._find_by_DOI(doi)
+        log.debug('  * result= '+ str(result))
+        if not result:
+            return 'ERROR idDoesNotExist'
         package_id = result.get('id')
-        log.debug('  * package_id '+ str(package_id))
         # Convert record
         #record = toolkit.get_action('package_export')({},{'id': package_id, 'format':format})
-        record = XMLRecord.from_record(package_export_as_record(package_id, format))
+        try:
+            record = XMLRecord.from_record(package_export_as_record(package_id, format))
+        except:
+            record = None
+        if not record:
+            return 'ERROR cannotDisseminateFormat'
 
         datestamp = result.get('datestamp')
-        log.debug(record)
         return (self._envelop(identifier, datestamp, record.get_xml_dict()))
 
     def _get_OAI_identifier(self, doi):
@@ -42,15 +49,23 @@ class RecordAccessService(object):
         #TODO: Replace with link to DB behind firewall!!
         try:
             conn = ckan_search.make_connection()
-            response = conn.query("doi:{0}".format(doi), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
-            package_id = response.results[0]['id']
-            metadata_modified = response.results[0].get('metadata_modified')
+            
+            results = []
+            # compatibility ckan 2.5 and 2.6
+            if callable(getattr(conn, "query", None)):
+                results = conn.query("doi:{0}".format(doi), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
+            else:
+                response = conn.search("doi:{0}".format(doi), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
+                results = response.docs
+            
+            package_id = results[0]['id']
+            metadata_modified = results[0].get('metadata_modified')
         except Exception, e:
             log.exception(e)
             return {}
-        finally:
-            if 'conn' in dir():
-                conn.close()
+        #finally:
+        #    if 'conn' in dir():
+        #        conn.close()
         return {'id':package_id, 'datestamp':metadata_modified}
 
     def _envelop(self, identifier, datestamp, content):
@@ -65,23 +80,12 @@ class RecordAccessService(object):
         if not isinstance(content, dict):
             content = {'#text': str(content)}
         else:
-            #fix header
+            oaipmh_dict['record']['metadata'] = content
+            #fix metadata header
             root_key = content.keys()[0]
             for key in content[root_key]:
-                log.debug(key)
-                if key.startswith('@'):
-                    if key == '@xsi:schemaLocation':
-                        pass
-                        #content[root_key][key] = content[root_key][key].split(' ')[-1]
-                    else:
-                        #pass
-                        content[root_key].pop(key, None)
-            content[root_key]['@xmlns:dc']="http://purl.org/dc/elements/1.1"
-            content[root_key]['@xmlns:oai_dc']="http://www.openarchives.org/OAI/2.0"
-            content[root_key]['@xmlns:xsi']="http://www.w3.org/2001/XMLSchema-instance"
-            content[root_key]['@xsi:schemaLocation']="http://www.openarchives.org/OAI/2.0/oai_dc.xsd"
-
-        oaipmh_dict['record']['metadata'] = content
+                if key.startswith('@xmlns'):
+                    oaipmh_dict['record']['metadata'][key] =  content[root_key][key]
 
         return oaipmh_dict
 
