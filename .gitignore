@@ -43,3 +43,6 @@ docs/_build/
 
 # MACOSX
 .DS_Store
+
+# Temporary Nano files
+.py.swp
