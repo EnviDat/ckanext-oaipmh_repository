@@ -8,6 +8,7 @@ import ckan.plugins.toolkit as toolkit
 from datetime import datetime
 import collections
 
+import oaipmh_error
 
 import logging
 log = logging.getLogger(__name__)
@@ -25,7 +26,8 @@ class RecordAccessService(object):
         result = self._find_by_DOI(doi)
         log.debug('  * result= '+ str(result))
         if not result:
-            return 'ERROR idDoesNotExist'
+            raise oaipmh_error.IdDoesNotExistError()
+
         package_id = result.get('id')
         # Convert record
         #record = toolkit.get_action('package_export')({},{'id': package_id, 'format':format})
@@ -34,7 +36,7 @@ class RecordAccessService(object):
         except:
             record = None
         if not record:
-            return 'ERROR cannotDisseminateFormat'
+            raise oaipmh_error.CannotDisseminateFormatError()
 
         datestamp = result.get('datestamp')
         return (self._envelop(identifier, datestamp, record.get_xml_dict()))
