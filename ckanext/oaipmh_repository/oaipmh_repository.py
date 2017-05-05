@@ -22,7 +22,7 @@ class OAIPMHRepository(object):
             'ListRecords': self.list_records,
             'ListSets': self.list_sets
         }
-        
+
     def handle_request(self, verb, params, url):
         handler = self.verb_handlers.get(verb)
         if not handler:
@@ -34,42 +34,41 @@ class OAIPMHRepository(object):
 
     def bad_verb(self, params):
         return {'@code':'badVerb', '#text': 'Illegal OAI verb' }
-        
+
     def identify(self, params={}):
         identify_dict = collections.OrderedDict()
         identify_dict['repositoryName'] = config.get('site.title') if config.get('site.title') else 'repository'
         identify_dict['baseURL'] = url_for(controller='ckanext.oaipmh_repository.controller:OAIPMHController', action='index')
         identify_dict['protocolVersion'] = '2.0'
-        if config.get('email_to'):
-            identify_dict['adminEmail'] = config.get('email_to', 'undefined')
+        identify_dict['adminEmail'] = config.get('email_to', 'admin@server.domain')
         identify_dict['earliestDatestamp'] = datetime(2004, 1, 1).strftime(self.dateformat)
         identify_dict['deletedRecord'] = 'no'
         identify_dict['granularity'] ='YYYY-MM-DD'
         return identify_dict
-        
+
     def get_record(self, params):
         return {'#text': 'get_record: implementation pending' }
-        
+
     def list_identifiers(self, params):
         return {'#text': 'list_identifiers: implementation pending' }
-        
+
     def list_metadata_formats(self, params):
         # return all the XML formats
         metadata_formats = MetadataFormats().get_all_metadata_formats()
         formats_dict = collections.OrderedDict()
         formats_dict['metadataFormat'] = []
         for metadata_format in metadata_formats:
-            if issubclass(type(metadata_format), XMLMetadataFormat):
+            if issubclass(type(metadata_format), XMLMetadataFormat) and  (metadata_format.get_format_name()!='oai_pmh'):
                 format_dict = collections.OrderedDict()
                 format_dict['metadataPrefix'] = metadata_format.get_format_name()
                 format_dict['schema'] = metadata_format.get_xsd_url()
                 format_dict['metadataNamespace'] = metadata_format.get_namespace()
                 formats_dict['metadataFormat'] += [format_dict]
         return formats_dict
-        
+
     def list_records(self, params):
         return {'#text': 'list_records: implementation pending' }
-        
+
     def list_sets(self, params):
         return {'#text': 'list_sets: implementation pending' }
 
@@ -89,13 +88,13 @@ class OAIPMHRepository(object):
             for param in params:
                 if param != 'verb':
                     oaipmh_dict['OAI-PMH']['request']['@'+str(param)] = str(params[param])
-        
+
         # Verb dict
         oaipmh_dict['OAI-PMH'][verb] = collections.OrderedDict()
         if not isinstance(content, dict):
             content = {'#text': str(content)}
         oaipmh_dict['OAI-PMH'][verb] = content
-        
+
         return oaipmh_dict
 
 

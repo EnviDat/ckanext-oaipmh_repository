@@ -2,6 +2,9 @@
 import ckanext.oaipmh_repository.plugin as plugin
 from ckanext.oaipmh_repository.oaipmh_repository import OAIPMHRepository
 
+from ckanext.package_converter.model.metadata_format import MetadataFormats
+from ckanext.package_converter.model.record import XMLRecord
+
 import ckan.plugins
 import ckan.model as model
 
@@ -9,7 +12,7 @@ from nose.tools import assert_equal, assert_true
 
 from logging import getLogger
 log = getLogger(__name__)
-    
+
 class TestPackageConverter(object):
     '''Tests for the ckanext.oaipmh_repository.plugin module.
 
@@ -48,8 +51,11 @@ class TestPackageConverter(object):
         ckan.plugins.unload('oaipmh_repository')
 
     def test_identify(self):
-        test_identify = OAIPMHRepository().handle_request('Identify', {}, 'REQUEST_URL')
-        log.info(test_identify)
-        # validate the XML??
-        assert_true(True)
+        identify_content = OAIPMHRepository().handle_request('Identify', {}, 'REQUEST_URL')
+        log.info(identify_content)
+        #Add metadata format oai-pmh(2.0),  http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd
+        identify_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], identify_content)
+        log.info(identify_record)
+        # validate the XML
+        assert_true(identify_record.validate())
 
