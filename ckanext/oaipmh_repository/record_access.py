@@ -17,8 +17,7 @@ class RecordAccessService(object):
     def __init__(self, dateformat, id_prefix):
         self.dateformat = dateformat
         self.id_prefix = id_prefix
-#<error code="idDoesNotExist">Identifier not found in this repository.</error>
-#<error code="cannotDisseminateFormat">The metadata format identified by the value given for the metadataPrefix argument is not supported by the item or by the repository.</error>
+
     def getRecord(self, identifier, format):
         # Get record
         doi = self._get_DOI(identifier)
@@ -30,7 +29,6 @@ class RecordAccessService(object):
 
         package_id = result.get('id')
         # Convert record
-        #record = toolkit.get_action('package_export')({},{'id': package_id, 'format':format})
         try:
             record = XMLRecord.from_record(package_export_as_record(package_id, format))
         except:

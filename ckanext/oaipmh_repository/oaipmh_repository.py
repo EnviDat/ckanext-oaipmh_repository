@@ -4,9 +4,11 @@ from datetime import datetime
 
 from xmltodict import unparse
 import collections
+import sys
 
 from ckanext.package_converter.model.metadata_format import MetadataFormats, XMLMetadataFormat
 
+from oaipmh_error import OAIPMHError, BadVerbError
 from record_access import RecordAccessService
 
 from logging import getLogger
@@ -27,16 +29,23 @@ class OAIPMHRepository(object):
         self.record_access = RecordAccessService(self.dateformat, 'oai:envidat.ch:')
 
     def handle_request(self, verb, params, url):
-        handler = self.verb_handlers.get(verb)
-        if not handler:
-            verb = 'error'
-            handler = self.bad_verb
-        content = handler(params)
-        xmldict = self._envelop(verb, params, url, content)
+        oaipmh_verb = 'error'
+        try:
+            handler = self.verb_handlers[verb]
+            content = handler(params)
+            oaipmh_verb = verb
+        except OAIPMHError as e:
+            content = e.as_xml_dict()
+        except KeyError as e:
+             content = BadVerbError().as_xml_dict()
+        except:
+           e = sys.exc_info()[1]
+           code = type(e).__name__
+           message = str(e)
+           content = OAIPMHError(code,  message).as_xml_dict()
+        
+        xmldict = self._envelop(oaipmh_verb, params, url, content)
         return unparse(xmldict, pretty=True)
-
-    def bad_verb(self, params):
-        return {'@code':'badVerb', '#text': 'Illegal OAI verb' }
 
     def identify(self, params={}):
         identify_dict = collections.OrderedDict()
