@@ -96,12 +96,15 @@ class OAIPMHRepository(object):
         oaipmh_dict['OAI-PMH']['@xsi:schemaLocation'] = 'http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd'
 
         oaipmh_dict['OAI-PMH']['responseDate'] = datetime.now().strftime(self.dateformat) #'2017-02-08T12:00:01Z'
-        oaipmh_dict['OAI-PMH']['request'] = {'@verb':verb, '#text':str(url).split('?')[0] }
+        oaipmh_dict['OAI-PMH']['request'] = { '#text':str(url).split('?')[0] }
 
-        if len(params)>1:
-            for param in params:
-                if param != 'verb':
-                    oaipmh_dict['OAI-PMH']['request']['@'+str(param)] = str(params[param])
+        if (verb != 'error'):
+            oaipmh_dict['OAI-PMH']['request'] = {'@verb':verb, '#text':str(url).split('?')[0] }
+
+            if len(params)>1:
+                for param in params:
+                    if param != 'verb':
+                        oaipmh_dict['OAI-PMH']['request']['@'+str(param)] = str(params[param])
 
         # Verb dict
         oaipmh_dict['OAI-PMH'][verb] = collections.OrderedDict()
