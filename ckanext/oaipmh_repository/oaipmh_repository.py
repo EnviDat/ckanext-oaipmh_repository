@@ -7,6 +7,9 @@ import collections
 import sys
 
 from ckanext.package_converter.model.metadata_format import MetadataFormats, XMLMetadataFormat
+from ckanext.package_converter.model.record import XMLRecord, Record
+
+import ckan.plugins as plugins
 
 from oaipmh_error import OAIPMHError, BadVerbError
 from record_access import RecordAccessService
@@ -14,9 +17,9 @@ from record_access import RecordAccessService
 from logging import getLogger
 log = getLogger(__name__)
 
-class OAIPMHRepository(object):
+class OAIPMHRepository(plugins.SingletonPlugin):
 
-    def __init__(self):
+    def __init__(self, dateformat="%Y-%m-%dT%H:%M:%SZ", id_prefix='oai:envidat.ch:', id_field='doi'):
         self.dateformat = "%Y-%m-%dT%H:%M:%SZ"
         self.verb_handlers = {
             'Identify': self.identify,
@@ -26,7 +29,7 @@ class OAIPMHRepository(object):
             'ListRecords': self.list_records,
             'ListSets': self.list_sets
         }
-        self.record_access = RecordAccessService(self.dateformat, 'oai:envidat.ch:')
+        self.record_access = RecordAccessService(self.dateformat, id_prefix, id_field)
 
     def handle_request(self, verb, params, url):
         oaipmh_verb = 'error'
@@ -45,6 +48,10 @@ class OAIPMHRepository(object):
            content = OAIPMHError(code,  message).as_xml_dict()
         
         xmldict = self._envelop(oaipmh_verb, params, url, content)
+        
+        oai_pmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], unparse(xmldict))
+        log.debug('Validating request, result = {0}'.format(oai_pmh_record.validate()))
+        log.debug('unparse(xmldict, pretty=True) = {0}'.format(unparse(xmldict, pretty=True)))
         return unparse(xmldict, pretty=True)
 
     def identify(self, params={}):
@@ -59,7 +66,6 @@ class OAIPMHRepository(object):
         return identify_dict
 
     def get_record(self, params):
-        log.debug(params)
         return(self.record_access.getRecord(params.get('identifier', 'NONE'), params.get('metadataPrefix', 'NOMF')))
 #       return {'#text': 'get_record: implementation pending' }
 
@@ -96,22 +102,30 @@ class OAIPMHRepository(object):
         oaipmh_dict['OAI-PMH']['@xsi:schemaLocation'] = 'http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd'
 
         oaipmh_dict['OAI-PMH']['responseDate'] = datetime.now().strftime(self.dateformat) #'2017-02-08T12:00:01Z'
-        oaipmh_dict['OAI-PMH']['request'] = { '#text':str(url).split('?')[0] }
+        oaipmh_dict['OAI-PMH']['request'] = collections.OrderedDict()
+        oaipmh_dict['OAI-PMH']['request']['#text'] = str(url).split('?')[0] 
 
         if (verb != 'error'):
-            oaipmh_dict['OAI-PMH']['request'] = {'@verb':verb, '#text':str(url).split('?')[0] }
+            oaipmh_dict['OAI-PMH']['request']['@verb'] = verb
 
             if len(params)>1:
                 for param in params:
                     if param != 'verb':
                         oaipmh_dict['OAI-PMH']['request']['@'+str(param)] = str(params[param])
 
-        # Verb dict
-        oaipmh_dict['OAI-PMH'][verb] = collections.OrderedDict()
-        if not isinstance(content, dict):
-            content = {'#text': str(content)}
-        oaipmh_dict['OAI-PMH'][verb] = content
-
+            # Verb dict
+            oaipmh_dict['OAI-PMH'][verb] = collections.OrderedDict()
+            if not isinstance(content, dict):
+                content = {'#text': str(content)}
+            oaipmh_dict['OAI-PMH'][verb] = content
+            
+            oaipmh_dict['OAI-PMH'][verb]['@xmlns:oai_dc']='http://www.openarchives.org/OAI/2.0/oai_dc/'
+            oaipmh_dict['OAI-PMH'][verb]['@xmlns:dc']='http://purl.org/dc/elements/1.1/'
+    
+            
+        else:
+            oaipmh_dict['OAI-PMH'][verb] = content.get('error', {})
+        
         return oaipmh_dict
 
 

@@ -14,24 +14,32 @@ import logging
 log = logging.getLogger(__name__)
 
 class RecordAccessService(object):
-    def __init__(self, dateformat, id_prefix):
+    def __init__(self, dateformat, id_prefix, id_field):
         self.dateformat = dateformat
         self.id_prefix = id_prefix
+        self.id_field = id_field
 
     def getRecord(self, identifier, format):
         # Get record
-        doi = self._get_DOI(identifier)
-        log.debug(' * get by DOI ' + doi )
-        result = self._find_by_DOI(doi)
+        id = self._get_ckan_id(identifier)
+        
+        log.debug(' * get by field ' + self.id_field )
+        result = self._find_by_field(self.id_field, id)
         log.debug('  * result= '+ str(result))
+
         if not result:
             raise oaipmh_error.IdDoesNotExistError()
 
         package_id = result.get('id')
         # Convert record
         try:
-            record = XMLRecord.from_record(package_export_as_record(package_id, format))
-        except:
+            log.debug(' * package_id = {0}'.format(package_id))
+            converted_record = package_export_as_record(package_id, format)
+            log.debug("\n\n getRecord converted_record = {0}\n\n".format(converted_record))
+            record = XMLRecord.from_record(converted_record)
+            
+        except Exception, e:
+            log.exception(e)
             record = None
         if not record:
             raise oaipmh_error.CannotDisseminateFormatError()
@@ -39,13 +47,13 @@ class RecordAccessService(object):
         datestamp = result.get('datestamp')
         return (self._envelop(identifier, datestamp, record.get_xml_dict()))
 
-    def _get_OAI_identifier(self, doi):
-        return('{prefix}{doi}'.format(prefix=self.id_prefix, doi=doi))
+    def _get_oaipmh_id(self, id):
+        return('{prefix}{id}'.format(prefix=self.id_prefix, id=id))
 
-    def _get_DOI(self, oai_id):
+    def _get_ckan_id(self, oai_id):
         return (oai_id.split(self.id_prefix)[-1])
-
-    def _find_by_DOI(self, doi):
+        
+    def _find_by_field(self, field, id):
         #TODO: Replace with link to DB behind firewall!!
         try:
             conn = ckan_search.make_connection()
@@ -53,15 +61,15 @@ class RecordAccessService(object):
             results = []
             # compatibility ckan 2.5 and 2.6
             if callable(getattr(conn, "query", None)):
-                results = conn.query("doi:{0}".format(doi), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
+                results = conn.query("{0}:{1}".format(field, id), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
             else:
-                response = conn.search("doi:{0}".format(doi), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
+                response = conn.search("{0}:{1}".format(field, id), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
                 results = response.docs
             
             package_id = results[0]['id']
             metadata_modified = results[0].get('metadata_modified')
         except Exception, e:
-            log.exception(e)
+            #log.exception(e)
             return {}
         #finally:
         #    if 'conn' in dir():
@@ -80,12 +88,14 @@ class RecordAccessService(object):
         if not isinstance(content, dict):
             content = {'#text': str(content)}
         else:
-            oaipmh_dict['record']['metadata'] = content
             #fix metadata header
             root_key = content.keys()[0]
+            oaipmh_dict['record']['metadata'] = collections.OrderedDict()
+            oaipmh_dict['record']['metadata'][root_key] = content[root_key]
             for key in content[root_key]:
                 if key.startswith('@xmlns'):
                     oaipmh_dict['record']['metadata'][key] =  content[root_key][key]
+                    oaipmh_dict['record'][key] =  content[root_key][key]
 
         return oaipmh_dict
 
