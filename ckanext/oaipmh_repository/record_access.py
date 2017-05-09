@@ -87,14 +87,7 @@ class RecordAccessService(object):
         if not isinstance(content, dict):
             content = {'#text': str(content)}
         else:
-            #fix metadata header
-            root_key = content.keys()[0]
-            oaipmh_dict['record']['metadata'] = collections.OrderedDict()
-            oaipmh_dict['record']['metadata'][root_key] = content[root_key]
-            for key in content[root_key]:
-                if key.startswith('@xmlns'):
-                    oaipmh_dict['record']['metadata'][key] =  content[root_key][key]
-                    oaipmh_dict['record'][key] =  content[root_key][key]
+            oaipmh_dict['record']['metadata'] = content
 
         return oaipmh_dict
 

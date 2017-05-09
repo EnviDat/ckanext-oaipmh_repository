@@ -121,9 +121,6 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                 content = {'#text': str(content)}
             oaipmh_dict['OAI-PMH'][verb] = content
 
-            oaipmh_dict['OAI-PMH'][verb]['@xmlns:oai_dc']='http://www.openarchives.org/OAI/2.0/oai_dc/'
-            oaipmh_dict['OAI-PMH'][verb]['@xmlns:dc']='http://purl.org/dc/elements/1.1/'
-
         else:
             oaipmh_dict['OAI-PMH'][verb] = content.get('error', {})
 
@@ -145,7 +142,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                            <xs:import namespace="http://www.openarchives.org/OAI/2.0/" schemaLocation="http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd" />
                            <xs:import namespace="{namespace}" schemaLocation="{schema}" />
                        </xs:schema>'''.format(namespace=metadata_format.get_namespace(), schema=metadata_format.get_xsd_url())
-            #log.debug(fixed_xsd)
+            log.debug(fixed_xsd)
             return(oai_pmh_record.validate(custom_xsd=fixed_xsd))
         except:
             log.error('Failed to validate OAI-PMH for format {0}'.format(metadata_prefix))
