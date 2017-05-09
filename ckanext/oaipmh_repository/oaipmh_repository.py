@@ -49,7 +49,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
 
         xmldict = self._envelop(oaipmh_verb, params, url, content)
 
-        if not self._is_valid_oai_pmh_record(xmldict):
+        if not self._is_valid_oai_pmh_record(xmldict, metadata_prefix=params.get('metadataPrefix')):
             log.error('OAI-PMH Response Validation FAILED')
         else:
             log.debug('OAI-PMH Response Validation SUCCESS')
@@ -129,7 +129,9 @@ class OAIPMHRepository(plugins.SingletonPlugin):
 
         return oaipmh_dict
 
-    def _is_valid_oai_pmh_record(self, xmldict, metadata_prefix='oai_dc'):
+    def _is_valid_oai_pmh_record(self, xmldict, metadata_prefix=''):
+        if not metadata_prefix:
+            metadata_prefix = 'oai_dc'
         try:
             oai_pmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], unparse(xmldict))
             
