@@ -64,7 +64,7 @@ class RecordAccessService(object):
             else:
                 response = conn.search("{0}:{1}".format(field, id), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
                 results = response.docs
-            log.debug(results)
+            #log.debug(results)
             package_id = results[0]['id']
             metadata_modified = results[0].get('metadata_modified')
         except Exception, e:

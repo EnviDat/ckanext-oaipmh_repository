@@ -53,6 +53,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
             log.error('OAI-PMH Response Validation FAILED')
         else:
             log.debug('OAI-PMH Response Validation SUCCESS')
+            log.debug('OAI-PMH Response is ERROR = {0}'.format(self._is_error_oai_pmh_record(xmldict)))
 
         return unparse(xmldict, pretty=True)
 
@@ -142,11 +143,14 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                            <xs:import namespace="http://www.openarchives.org/OAI/2.0/" schemaLocation="http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd" />
                            <xs:import namespace="{namespace}" schemaLocation="{schema}" />
                        </xs:schema>'''.format(namespace=metadata_format.get_namespace(), schema=metadata_format.get_xsd_url())
-            log.debug(fixed_xsd)
+            #log.debug(fixed_xsd)
             return(oai_pmh_record.validate(custom_xsd=fixed_xsd))
         except:
             log.error('Failed to validate OAI-PMH for format {0}'.format(metadata_prefix))
             return False
+
+    def _is_error_oai_pmh_record(self, xmldict):
+        return(xmldict.get('OAI-PMH', {}).has_key('error'))
 
 
 

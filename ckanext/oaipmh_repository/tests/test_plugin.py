@@ -15,7 +15,7 @@ from xmltodict import unparse
 
 import collections
  
-from nose.tools import assert_equal, assert_true
+from nose.tools import assert_equal, assert_true, assert_false
 
 from logging import getLogger
 log = getLogger(__name__)
@@ -62,31 +62,41 @@ class TestPackageConverter(object):
         # tests that run after ours.
         ckan.plugins.unload('oaipmh_repository')
 
+    def test_bad_request(self):
+        request_content = OAIPMHRepository().handle_request('badverb', {}, 'REQUEST_URL')
+        oaipmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], request_content)
+        # validate the XML
+        assert_true(oaipmh_record.validate())
+        assert_true(OAIPMHRepository()._is_error_oai_pmh_record(oaipmh_record.get_xml_dict()))
+
     def test_identify(self):
         request_content = OAIPMHRepository().handle_request('Identify', {}, 'REQUEST_URL')
         oaipmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], request_content)
         # validate the XML
         assert_true(oaipmh_record.validate())
+        assert_false(OAIPMHRepository()._is_error_oai_pmh_record(oaipmh_record.get_xml_dict()))
 
     def test_list_metadata_formats(self):
         request_content = OAIPMHRepository().handle_request('ListMetadataFormats', {}, 'REQUEST_URL')
         oaipmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], request_content)
         # validate the XML
         assert_true(oaipmh_record.validate())
+        assert_false(OAIPMHRepository()._is_error_oai_pmh_record(oaipmh_record.get_xml_dict()))
 
     def test_get_record(self):
         dataset = factories.Dataset(name='dataset_test_api_export', author='Test Plugin')
         id_field = 'name' 
-        
-        oaipmh_identifier = OAIPMHRepository(id_field=id_field).record_access._get_oaipmh_id(dataset.get(id_field))
+        repository = OAIPMHRepository(id_field=id_field)
+        oaipmh_identifier = repository.record_access._get_oaipmh_id(dataset.get(id_field))
 
-        request_content = OAIPMHRepository(id_field=id_field).handle_request('GetRecord', {'identifier':oaipmh_identifier, 
+        request_content = repository.handle_request('GetRecord', {'identifier':oaipmh_identifier, 
                                                                         'metadataPrefix':'oai_dc'}, 'REQUEST_URL')
         oaipmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], request_content)
 
-        log.debug('oaipmh_record = \n{0}\n'.format(oaipmh_record.content))
         # validate the XML
-        assert_true(oaipmh_record.validate())
+        assert_true(repository._is_valid_oai_pmh_record(oaipmh_record.get_xml_dict()))
+        assert_false(repository._is_error_oai_pmh_record(oaipmh_record.get_xml_dict()))
+        
 
 class TestOAIDCConverter(BaseConverter):
 
