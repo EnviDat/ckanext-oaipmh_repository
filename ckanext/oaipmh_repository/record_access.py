@@ -22,10 +22,9 @@ class RecordAccessService(object):
     def getRecord(self, identifier, format):
         # Get record
         id = self._get_ckan_id(identifier)
-        
-        log.debug(' * get by field ' + self.id_field )
+
         result = self._find_by_field(self.id_field, id)
-        log.debug('  * result= '+ str(result))
+        log.debug(' get Record  result= '+ str(result))
 
         if not result:
             raise oaipmh_error.IdDoesNotExistError()
@@ -33,11 +32,10 @@ class RecordAccessService(object):
         package_id = result.get('id')
         # Convert record
         try:
-            log.debug(' * package_id = {0}'.format(package_id))
+            log.debug(' Found package_id = {0}'.format(package_id))
             converted_record = package_export_as_record(package_id, format)
-            log.debug("\n\n getRecord converted_record = {0}\n\n".format(converted_record))
             record = XMLRecord.from_record(converted_record)
-            
+
         except Exception, e:
             log.exception(e)
             record = None
@@ -52,24 +50,25 @@ class RecordAccessService(object):
 
     def _get_ckan_id(self, oai_id):
         return (oai_id.split(self.id_prefix)[-1])
-        
+
     def _find_by_field(self, field, id):
         #TODO: Replace with link to DB behind firewall!!
         try:
             conn = ckan_search.make_connection()
-            
+
             results = []
             # compatibility ckan 2.5 and 2.6
             if callable(getattr(conn, "query", None)):
-                results = conn.query("{0}:{1}".format(field, id), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
+                response = conn.query("{0}:{1}".format(field, id), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
+                results = response.results
             else:
                 response = conn.search("{0}:{1}".format(field, id), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
                 results = response.docs
-            
+            log.debug(results)
             package_id = results[0]['id']
             metadata_modified = results[0].get('metadata_modified')
         except Exception, e:
-            #log.exception(e)
+            log.exception(e)
             return {}
         #finally:
         #    if 'conn' in dir():

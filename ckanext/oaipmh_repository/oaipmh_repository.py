@@ -46,12 +46,14 @@ class OAIPMHRepository(plugins.SingletonPlugin):
            code = type(e).__name__
            message = str(e)
            content = OAIPMHError(code,  message).as_xml_dict()
-        
+
         xmldict = self._envelop(oaipmh_verb, params, url, content)
-        
-        oai_pmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], unparse(xmldict))
-        log.debug('Validating request, result = {0}'.format(oai_pmh_record.validate()))
-        log.debug('unparse(xmldict, pretty=True) = {0}'.format(unparse(xmldict, pretty=True)))
+
+        if not self._is_valid_oai_pmh_record(xmldict):
+            log.error('OAI-PMH Response Validation FAILED')
+        else:
+            log.debug('OAI-PMH Response Validation SUCCESS')
+
         return unparse(xmldict, pretty=True)
 
     def identify(self, params={}):
@@ -67,7 +69,6 @@ class OAIPMHRepository(plugins.SingletonPlugin):
 
     def get_record(self, params):
         return(self.record_access.getRecord(params.get('identifier', 'NONE'), params.get('metadataPrefix', 'NOMF')))
-#       return {'#text': 'get_record: implementation pending' }
 
     def list_identifiers(self, params):
         return {'#text': 'list_identifiers: implementation pending' }
@@ -118,19 +119,34 @@ class OAIPMHRepository(plugins.SingletonPlugin):
             if not isinstance(content, dict):
                 content = {'#text': str(content)}
             oaipmh_dict['OAI-PMH'][verb] = content
-            
+
             oaipmh_dict['OAI-PMH'][verb]['@xmlns:oai_dc']='http://www.openarchives.org/OAI/2.0/oai_dc/'
             oaipmh_dict['OAI-PMH'][verb]['@xmlns:dc']='http://purl.org/dc/elements/1.1/'
-    
-            
+
         else:
             oaipmh_dict['OAI-PMH'][verb] = content.get('error', {})
-        
+
         return oaipmh_dict
 
+    def _is_valid_oai_pmh_record(self, xmldict, metadata_prefix='oai_dc'):
+        try:
+            oai_pmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], unparse(xmldict))
+            
+            # get the format
+            metadata_format = MetadataFormats().get_metadata_formats(metadata_prefix)[0]
 
-
-
+            fixed_xsd = '''<xs:schema xmlns="http://www.openarchives.org/OAI/2.0/"
+                                  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                                  xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" >
+                           <xs:import namespace="http://www.openarchives.org/OAI/2.0/" schemaLocation="http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd" />
+                           <xs:import namespace="{namespace}" schemaLocation="{schema}" />
+                       </xs:schema>'''.format(namespace=metadata_format.get_namespace(), schema=metadata_format.get_xsd_url())
+            log.debug(fixed_xsd)
+            return(oai_pmh_record.validate(custom_xsd=fixed_xsd))
+        except:
+            log.error('Failed to validate OAI-PMH for format {0}'.format(metadata_prefix))
+            return False
 
 
 
