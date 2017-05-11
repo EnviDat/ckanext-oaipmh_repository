@@ -5,6 +5,8 @@ from ckanext.package_converter.model.record import JSONRecord, XMLRecord
 from ckanext.package_converter.logic import package_export_as_record
 import ckan.plugins.toolkit as toolkit
 
+from pylons import config
+
 from datetime import datetime
 import collections
 
@@ -14,22 +16,44 @@ import logging
 log = logging.getLogger(__name__)
 
 class RecordAccessService(object):
-    def __init__(self, dateformat, id_prefix, id_field):
+    def __init__(self, dateformat, id_prefix, id_field, regex):
         self.dateformat = dateformat
         self.id_prefix = id_prefix
         self.id_field = id_field
+        self.regex = regex
 
-    def getRecord(self, identifier, format):
+    def get_record(self, oai_identifier, format):
         # Get record
-        id = self._get_ckan_id(identifier)
+        id = self._get_ckan_id(oai_identifier)
 
-        result = self._find_by_field(self.id_field, id)
+        result = self._find_by_field(id)
         log.debug(' get Record  result= '+ str(result))
 
         if not result:
             raise oaipmh_error.IdDoesNotExistError()
 
         package_id = result.get('id')
+        datestamp = result.get('datestamp')
+
+        return(self._export_package(package_id, oai_identifier, datestamp, format))
+
+    def list_records(self, format, start_date=None, end_date=None):
+    #URL url = new URL(CKAN_URL + "/api/3/action/package_search?q=extras_doi%3A%22" + DOI_PREFIX + "%2F*%22%0Ametadata_modified%3A+["+ startDateStr + "+TO+"+ endDateStr + "]&sort=metadata_modified+asc");
+        results = self._find_by_date(start_date, end_date)
+        log.debug(' list_records results ' + str(results))
+        if not results:
+            raise oaipmh_error.NoRecordsMatchError()
+        
+        record_list = {'record':[]}
+        
+        for result in results:
+            package_id = result.get('id')
+            datestamp = result.get('datestamp')
+            oai_identifier = self._get_oaipmh_id(result.get(self.id_field))
+            record_list['record'] += [self._export_package(package_id, oai_identifier, datestamp, format)['record']]
+        return record_list
+    
+    def _export_package(self, package_id, oai_identifier, datestamp, format):
         # Convert record
         try:
             log.debug(' Found package_id = {0}'.format(package_id))
@@ -42,8 +66,7 @@ class RecordAccessService(object):
         if not record:
             raise oaipmh_error.CannotDisseminateFormatError()
 
-        datestamp = result.get('datestamp')
-        return (self._envelop(identifier, datestamp, record.get_xml_dict()))
+        return (self._envelop(oai_identifier, datestamp, record.get_xml_dict()))
 
     def _get_oaipmh_id(self, id):
         return('{prefix}{id}'.format(prefix=self.id_prefix, id=id))
@@ -51,18 +74,20 @@ class RecordAccessService(object):
     def _get_ckan_id(self, oai_id):
         return (oai_id.split(self.id_prefix)[-1])
 
-    def _find_by_field(self, field, id):
+    def _find_by_field(self, id):
         #TODO: Replace with link to DB behind firewall!!
+        field = self.id_field
+        results = []
         try:
             conn = ckan_search.make_connection()
-
-            results = []
             # compatibility ckan 2.5 and 2.6
             if callable(getattr(conn, "query", None)):
-                response = conn.query("{0}:{1}".format(field, id), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
+                response = conn.query("{0}:{1}".format(field, id), fq='state:active', 
+                                       fields='id, state, extras_doi, metadata_modified, {0}'.format(field), rows=1)
                 results = response.results
             else:
-                response = conn.search("{0}:{1}".format(field, id), fq='state:active', fields='id, state, extras_doi, metadata_modified', rows=1)
+                response = conn.search("{0}:{1}".format(field, id), fq='state:active', 
+                                       fields='id, state, extras_doi, metadata_modified, {0}'.format(field), rows=1)
                 results = response.docs
             #log.debug(results)
             package_id = results[0]['id']
@@ -73,7 +98,48 @@ class RecordAccessService(object):
         #finally:
         #    if 'conn' in dir():
         #        conn.close()
-        return {'id':package_id, 'datestamp':metadata_modified}
+        return {'id':package_id, 'datestamp':metadata_modified }
+
+    def _find_by_date(self, start_date, end_date):
+        #TODO: Add link to DB behind firewall!!
+        results = []
+        packages_found = []
+        try:
+            conn = ckan_search.make_connection()
+
+            # compatibility ckan 2.5 and 2.6
+
+            query_text = '{0}:{1}'.format(self.id_field, self.regex if self.regex else '*')
+            
+            if start_date or end_date:
+                start_date_str = start_date if start_date else '*'
+                end_date_str = end_date if end_date else '*'
+                query_text += ' metadata_modified:[{0} TO {1}]'.format(start_date_str, end_date_str)
+
+            log.debug(query_text)
+            if callable(getattr(conn, "query", None)):
+                response = conn.query(query_text, 
+                                       fq='state:active +site_id:\"%s\" ' % config.get('ckan.site_id'), 
+                                       fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field))
+                results = response.results
+            else:
+                response = conn.search(query_text,
+                                       fq='state:active +site_id:\"%s\" ' % config.get('ckan.site_id'), 
+                                       fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field))
+                results = response.docs
+            
+            for result in results:
+                package_id = result['id']
+                metadata_modified = result.get('metadata_modified')
+                value = result.get(self.id_field) if result.get(self.id_field) else result.get('extras_' + self.id_field)
+                packages_found += [{'id':package_id, 'datestamp':metadata_modified, self.id_field:value}]
+        except Exception, e:
+            log.exception(e)
+            return []
+        #finally:
+        #    if 'conn' in dir():
+        #        conn.close()
+        return packages_found
 
     def _envelop(self, identifier, datestamp, content):
         oaipmh_dict = collections.OrderedDict()

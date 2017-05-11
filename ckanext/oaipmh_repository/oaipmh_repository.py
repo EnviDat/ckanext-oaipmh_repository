@@ -31,7 +31,8 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         }
         self.id_prefix = config.get('oaipmh_repository.id_prefix', 'oai:ckan:id:')
         self.id_field = config.get('oaipmh_repository.id_field', 'name')
-        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field)
+        self.regex = config.get('oaipmh_repository.regex', '*')
+        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field, self.regex)
         log.debug(self)
 
     def handle_request(self, verb, params, url):
@@ -72,7 +73,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         return identify_dict
 
     def get_record(self, params):
-        return(self.record_access.getRecord(params.get('identifier', 'NONE'), params.get('metadataPrefix', 'NOMF')))
+        return(self.record_access.get_record(params.get('identifier'), params.get('metadataPrefix')))
 
     def list_identifiers(self, params):
         return {'#text': 'list_identifiers: implementation pending' }
@@ -92,10 +93,12 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         return formats_dict
 
     def list_records(self, params):
-        return {'#text': 'list_records: implementation pending' }
+        return(self.record_access.list_records(params.get('metadataPrefix'), 
+                                               params.get('from'), 
+                                               params.get('until')))
 
     def list_sets(self, params):
-        return {'#text': 'list_sets: implementation pending' }
+        return {'#text': 'list_sets: implementation pending'}
 
     def _envelop(self, verb, params, url, content):
         oaipmh_dict = collections.OrderedDict()
@@ -120,7 +123,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
 
             # Verb dict
             oaipmh_dict['OAI-PMH'][verb] = collections.OrderedDict()
-            if not isinstance(content, dict):
+            if not isinstance(content, dict) and  not isinstance(content, list):
                 content = {'#text': str(content)}
             oaipmh_dict['OAI-PMH'][verb] = content
 
@@ -145,7 +148,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                            <xs:import namespace="http://www.openarchives.org/OAI/2.0/" schemaLocation="http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd" />
                            <xs:import namespace="{namespace}" schemaLocation="{schema}" />
                        </xs:schema>'''.format(namespace=metadata_format.get_namespace(), schema=metadata_format.get_xsd_url())
-            log.debug(fixed_xsd)
+            #log.debug(fixed_xsd)
             return(oai_pmh_record.validate(custom_xsd=fixed_xsd))
         except:
             log.error('Failed to validate OAI-PMH for format {0}'.format(metadata_prefix))

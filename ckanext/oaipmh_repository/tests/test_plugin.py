@@ -40,7 +40,11 @@ class TestPackageConverter(object):
         # Test code should use CKAN's plugins.load() function to load plugins
         # to be tested.
         ckan.plugins.load('oaipmh_repository')
+        
+        model.repo.rebuild_db()
+        search.index_for('Package').clear()
         search.rebuild()
+        
         Converters().converters_dict = {}
         Converters().set_converter(TestOAIDCConverter())
                 
@@ -90,6 +94,19 @@ class TestPackageConverter(object):
 
         request_content = repository.handle_request('GetRecord', {'identifier':oaipmh_identifier, 
                                                                         'metadataPrefix':'oai_dc'}, 'REQUEST_URL')
+        oaipmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], request_content)
+
+        # validate the XML
+        assert_true(repository._is_valid_oai_pmh_record(oaipmh_record.get_xml_dict()))
+        assert_false(repository._is_error_oai_pmh_record(oaipmh_record.get_xml_dict()))
+        
+    def test_list_records(self):
+        dataset = factories.Dataset(name='dataset_test_api_export_01', author='Test Plugin')
+        dataset = factories.Dataset(name='bad_dataset_test_api_export', author='Test Plugin')
+        dataset = factories.Dataset(name='dataset_test_api_export_02', author='Test Plugin')
+        repository = OAIPMHRepository()
+
+        request_content = repository.handle_request('ListRecords', {'metadataPrefix':'oai_dc'}, 'REQUEST_URL')
         oaipmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], request_content)
 
         # validate the XML
