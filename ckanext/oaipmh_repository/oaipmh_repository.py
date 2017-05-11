@@ -19,8 +19,8 @@ log = getLogger(__name__)
 
 class OAIPMHRepository(plugins.SingletonPlugin):
 
-    def __init__(self, dateformat="%Y-%m-%dT%H:%M:%SZ", id_prefix='oai:envidat.ch:', id_field='doi'):
-        self.dateformat = "%Y-%m-%dT%H:%M:%SZ"
+    def __init__(self):
+        self.dateformat = config.get('oaipmh_repository.dateformat', '%Y-%m-%dT%H:%M:%SZ')
         self.verb_handlers = {
             'Identify': self.identify,
             'GetRecord': self.get_record,
@@ -29,7 +29,10 @@ class OAIPMHRepository(plugins.SingletonPlugin):
             'ListRecords': self.list_records,
             'ListSets': self.list_sets
         }
-        self.record_access = RecordAccessService(self.dateformat, id_prefix, id_field)
+        self.id_prefix = config.get('oaipmh_repository.id_prefix', 'oai:ckan:id:')
+        self.id_field = config.get('oaipmh_repository.id_field', 'name')
+        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field)
+        log.debug(self)
 
     def handle_request(self, verb, params, url):
         oaipmh_verb = 'error'
@@ -151,12 +154,20 @@ class OAIPMHRepository(plugins.SingletonPlugin):
     def _is_error_oai_pmh_record(self, xmldict):
         return(xmldict.get('OAI-PMH', {}).has_key('error'))
 
+    def __repr__(self):
+        return str(self)
+    
+    def __str__(self):
+        return unicode(self).encode('utf-8') 
 
-
-
-
-
-
+    def __unicode__(self):
+        return (u'''OAIPMHRepository: granularity = {dateformat}, 
+                                      prefix = {id_prefix}, id_field = {id_field}, 
+                                      verb_handlers = {handlers}''').format(
+                                      dateformat=self.dateformat, 
+                                      id_prefix=self.id_prefix, 
+                                      id_field=self.id_field, 
+                                      handlers=self.verb_handlers.keys())
 
 
 

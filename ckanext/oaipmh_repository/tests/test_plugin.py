@@ -85,9 +85,8 @@ class TestPackageConverter(object):
 
     def test_get_record(self):
         dataset = factories.Dataset(name='dataset_test_api_export', author='Test Plugin')
-        id_field = 'name' 
-        repository = OAIPMHRepository(id_field=id_field)
-        oaipmh_identifier = repository.record_access._get_oaipmh_id(dataset.get(id_field))
+        repository = OAIPMHRepository()
+        oaipmh_identifier = repository.record_access._get_oaipmh_id(dataset.get(repository.id_field))
 
         request_content = repository.handle_request('GetRecord', {'identifier':oaipmh_identifier, 
                                                                         'metadataPrefix':'oai_dc'}, 'REQUEST_URL')
