@@ -113,6 +113,19 @@ class TestPackageConverter(object):
         assert_true(repository._is_valid_oai_pmh_record(oaipmh_record.get_xml_dict()))
         assert_false(repository._is_error_oai_pmh_record(oaipmh_record.get_xml_dict()))
         
+    def test_list_identifiers(self):
+        dataset = factories.Dataset(name='dataset_test_api_export_01', author='Test Plugin')
+        dataset = factories.Dataset(name='bad_dataset_test_api_export', author='Test Plugin')
+        dataset = factories.Dataset(name='dataset_test_api_export_02', author='Test Plugin')
+        repository = OAIPMHRepository()
+
+        request_content = repository.handle_request('ListIdentifiers', {'metadataPrefix':'oai_dc'}, 'REQUEST_URL')
+        oaipmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], request_content)
+
+        # validate the XML
+        assert_true(repository._is_valid_oai_pmh_record(oaipmh_record.get_xml_dict()))
+        assert_false(repository._is_error_oai_pmh_record(oaipmh_record.get_xml_dict()))
+        
 
 class TestOAIDCConverter(BaseConverter):
 
