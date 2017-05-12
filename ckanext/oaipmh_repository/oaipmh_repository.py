@@ -11,7 +11,7 @@ from ckanext.package_converter.model.record import XMLRecord, Record
 
 import ckan.plugins as plugins
 
-from oaipmh_error import OAIPMHError, BadVerbError
+import oaipmh_error
 from record_access import RecordAccessService
 
 from logging import getLogger
@@ -41,15 +41,15 @@ class OAIPMHRepository(plugins.SingletonPlugin):
             handler = self.verb_handlers[verb]
             content = handler(params)
             oaipmh_verb = verb
-        except OAIPMHError as e:
+        except oaipmh_error.OAIPMHError as e:
             content = e.as_xml_dict()
         except KeyError as e:
-             content = BadVerbError().as_xml_dict()
+             content = oaipmh_error.BadVerbError().as_xml_dict()
         except:
            e = sys.exc_info()[1]
            code = type(e).__name__
            message = str(e)
-           content = OAIPMHError(code,  message).as_xml_dict()
+           content = oaipmh_error.OAIPMHError(code,  message).as_xml_dict()
 
         xmldict = self._envelop(oaipmh_verb, params, url, content)
 
@@ -62,6 +62,9 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         return unparse(xmldict, pretty=True)
 
     def identify(self, params={}):
+        if params:
+            raise oaipmh_error.BadArgumentError()
+        
         identify_dict = collections.OrderedDict()
         identify_dict['repositoryName'] = config.get('site.title') if config.get('site.title') else 'repository'
         identify_dict['baseURL'] = url_for(controller='ckanext.oaipmh_repository.controller:OAIPMHController', action='index')
@@ -73,16 +76,23 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         return identify_dict
 
     def get_record(self, params):
+        if set(params.keys()).difference(['identifier','metadataPrefix']):
+            raise oaipmh_error.BadArgumentError()
         return(self.record_access.get_record(params.get('identifier'), params.get('metadataPrefix')))
 
     def list_identifiers(self, params):
+        self._validate_params_list(params)
         return(self.record_access.list_identifiers(params.get('metadataPrefix'), 
                                                    params.get('from'), 
                                                	   params.get('until')))
 
     def list_metadata_formats(self, params):
+        if set(params.keys()).difference(['identifier']):
+            raise oaipmh_error.BadArgumentError()
         # return all the XML formats
         metadata_formats = MetadataFormats().get_all_metadata_formats()
+        if not metadata_formats:
+            raise oaipmh_error.NoMetadataFormatsError()
         formats_dict = collections.OrderedDict()
         formats_dict['metadataFormat'] = []
         for metadata_format in metadata_formats:
@@ -95,13 +105,25 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         return formats_dict
 
     def list_records(self, params):
+        self._validate_params_list(params)
         return(self.record_access.list_records(params.get('metadataPrefix'), 
                                                params.get('from'), 
                                                params.get('until')))
 
     def list_sets(self, params):
+        raise oaipmh_error.NoSetHierarchyError()
         return {'#text': 'list_sets: implementation pending'}
 
+    def _validate_params_list(self, params):
+        if set(params.keys()).difference(['metadataPrefix', 'from', 'until']):
+            if 'set' in params.keys():
+                raise oaipmh_error.NoSetHierarchyError()
+            if 'resumptionToken' in params.keys():
+                raise oaipmh_error.BadResumptionTokenError()
+            raise oaipmh_error.BadArgumentError()
+        return
+            
+    
     def _envelop(self, verb, params, url, content):
         oaipmh_dict = collections.OrderedDict()
 
