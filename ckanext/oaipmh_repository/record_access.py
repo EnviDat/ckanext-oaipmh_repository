@@ -38,7 +38,6 @@ class RecordAccessService(object):
         return(self._export_package(package_id, oai_identifier, datestamp, format))
 
     def list_records(self, format, start_date=None, end_date=None):
-    #URL url = new URL(CKAN_URL + "/api/3/action/package_search?q=extras_doi%3A%22" + DOI_PREFIX + "%2F*%22%0Ametadata_modified%3A+["+ startDateStr + "+TO+"+ endDateStr + "]&sort=metadata_modified+asc");
         results = self._find_by_date(start_date, end_date)
         log.debug(' list_records results ' + str(results))
         if not results:
@@ -53,6 +52,18 @@ class RecordAccessService(object):
             record_list['record'] += [self._export_package(package_id, oai_identifier, datestamp, format)['record']]
         return record_list
     
+    def list_identifiers(self, format, start_date=None, end_date=None):
+        results = self.list_records(format, start_date, end_date)
+
+        if not results:
+            raise oaipmh_error.NoRecordsMatchError()
+        
+        identifiers_list = {'header':[]}
+        
+        for result in results.get('record',[]):
+            identifiers_list['header'] += [result['header']]
+        return identifiers_list
+    
     def _export_package(self, package_id, oai_identifier, datestamp, format):
         # Convert record
         try:
@@ -66,7 +77,7 @@ class RecordAccessService(object):
         if not record:
             raise oaipmh_error.CannotDisseminateFormatError()
 
-        return (self._envelop(oai_identifier, datestamp, record.get_xml_dict()))
+        return (self._envelop_record(oai_identifier, datestamp, record.get_xml_dict()))
 
     def _get_oaipmh_id(self, id):
         return('{prefix}{id}'.format(prefix=self.id_prefix, id=id))
@@ -99,6 +110,17 @@ class RecordAccessService(object):
         #    if 'conn' in dir():
         #        conn.close()
         return {'id':package_id, 'datestamp':metadata_modified }
+    
+    def _format_date(self, date_input):
+        if not date_input:
+            return '*'
+        try:
+            return(datetime.strptime(date_input, self.dateformat).strftime(self.dateformat))
+        except:
+            try:
+                return(datetime.strptime(date_input, "%Y-%m-%d").strftime(self.dateformat))
+            except:
+                raise oaipmh_error.BadArgumentError('Datestamp is expected one of the following formats: YYYY-MM-DDThh:mm:ssZ OR YYYY-MM-DD')
 
     def _find_by_date(self, start_date, end_date):
         #TODO: Add link to DB behind firewall!!
@@ -108,23 +130,22 @@ class RecordAccessService(object):
             conn = ckan_search.make_connection()
 
             # compatibility ckan 2.5 and 2.6
-
             query_text = '{0}:{1}'.format(self.id_field, self.regex if self.regex else '*')
             
             if start_date or end_date:
-                start_date_str = start_date if start_date else '*'
-                end_date_str = end_date if end_date else '*'
+                start_date_str = self._format_date(start_date)
+                end_date_str = self._format_date(end_date)
                 query_text += ' metadata_modified:[{0} TO {1}]'.format(start_date_str, end_date_str)
 
             log.debug(query_text)
             if callable(getattr(conn, "query", None)):
                 response = conn.query(query_text, 
-                                       fq='state:active +site_id:\"%s\" ' % config.get('ckan.site_id'), 
+                                       fq='state:active site_id:%s' % config.get('ckan.site_id'), 
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field))
                 results = response.results
             else:
                 response = conn.search(query_text,
-                                       fq='state:active +site_id:\"%s\" ' % config.get('ckan.site_id'), 
+                                       fq='state:active site_id:%s' % config.get('ckan.site_id'), 
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field))
                 results = response.docs
             
@@ -133,6 +154,8 @@ class RecordAccessService(object):
                 metadata_modified = result.get('metadata_modified')
                 value = result.get(self.id_field) if result.get(self.id_field) else result.get('extras_' + self.id_field)
                 packages_found += [{'id':package_id, 'datestamp':metadata_modified, self.id_field:value}]
+        except oaipmh_error.OAIPMHError, e:
+            raise e
         except Exception, e:
             log.exception(e)
             return []
@@ -141,14 +164,11 @@ class RecordAccessService(object):
         #        conn.close()
         return packages_found
 
-    def _envelop(self, identifier, datestamp, content):
+    def _envelop_record(self, identifier, datestamp, content):
         oaipmh_dict = collections.OrderedDict()
 
         # Header
-        oaipmh_dict['record'] = collections.OrderedDict()
-        oaipmh_dict['record']['header'] = collections.OrderedDict()
-        oaipmh_dict['record']['header']['identifier'] = identifier
-        oaipmh_dict['record']['header']['datestamp'] = datestamp.strftime(self.dateformat)
+        oaipmh_dict['record'] = self._envelop_header(identifier, datestamp)
 
         if not isinstance(content, dict):
             content = {'#text': str(content)}
@@ -157,4 +177,13 @@ class RecordAccessService(object):
 
         return oaipmh_dict
 
+    def _envelop_header(self, identifier, datestamp):
+        oaipmh_dict = collections.OrderedDict()
+
+        # Header
+        oaipmh_dict['header'] = collections.OrderedDict()
+        oaipmh_dict['header']['identifier'] = identifier
+        oaipmh_dict['header']['datestamp'] = datestamp.strftime(self.dateformat)
+
+        return oaipmh_dict
 

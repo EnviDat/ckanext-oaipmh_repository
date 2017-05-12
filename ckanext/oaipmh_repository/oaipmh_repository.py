@@ -76,7 +76,9 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         return(self.record_access.get_record(params.get('identifier'), params.get('metadataPrefix')))
 
     def list_identifiers(self, params):
-        return {'#text': 'list_identifiers: implementation pending' }
+        return(self.record_access.list_identifiers(params.get('metadataPrefix'), 
+                                                   params.get('from'), 
+                                               	   params.get('until')))
 
     def list_metadata_formats(self, params):
         # return all the XML formats
