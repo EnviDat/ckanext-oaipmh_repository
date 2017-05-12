@@ -124,6 +124,8 @@ class RecordAccessService(object):
 
     def _find_by_date(self, start_date, end_date):
         #TODO: Add link to DB behind firewall!!
+        #TODO: Add tokens (limit to 100 rows)
+        max_results = 100
         results = []
         packages_found = []
         try:
@@ -141,12 +143,14 @@ class RecordAccessService(object):
             if callable(getattr(conn, "query", None)):
                 response = conn.query(query_text, 
                                        fq='state:active site_id:%s' % config.get('ckan.site_id'), 
-                                       fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field))
+                                       fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
+                                       rows=max_results)
                 results = response.results
             else:
                 response = conn.search(query_text,
                                        fq='state:active site_id:%s' % config.get('ckan.site_id'), 
-                                       fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field))
+                                       fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
+                                       rows=max_results)
                 results = response.docs
             
             for result in results:
