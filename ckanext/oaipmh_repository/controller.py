@@ -28,7 +28,9 @@ class OAIPMHController(BaseController):
                 #r = requests.get(url)
                 #content = r.content
                 repository = OAIPMHRepository()
-                content = repository.handle_request(verb, request.params, request.url)
+                params = request.params.copy()
+                params.pop('verb', None)
+                content = repository.handle_request(verb, params, request.url)
                 response.content_type = 'text/xml'
                 response.headers['content-type'] = 'text/xml; charset=UTF-8'
                 return(content)
