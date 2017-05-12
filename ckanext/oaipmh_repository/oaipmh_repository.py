@@ -67,7 +67,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         
         identify_dict = collections.OrderedDict()
         identify_dict['repositoryName'] = config.get('site.title') if config.get('site.title') else 'repository'
-        identify_dict['baseURL'] = url_for(controller='ckanext.oaipmh_repository.controller:OAIPMHController', action='index')
+        identify_dict['baseURL'] = config.get('ckan.site_url') + url_for(controller='ckanext.oaipmh_repository.controller:OAIPMHController', action='index')
         identify_dict['protocolVersion'] = '2.0'
         identify_dict['adminEmail'] = config.get('email_to', 'admin@server.domain')
         identify_dict['earliestDatestamp'] = datetime(2004, 1, 1).strftime(self.dateformat)
