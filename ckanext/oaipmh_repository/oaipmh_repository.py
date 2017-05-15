@@ -122,8 +122,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                 raise oaipmh_error.BadResumptionTokenError()
             raise oaipmh_error.BadArgumentError()
         return
-            
-    
+
     def _envelop(self, verb, params, url, content):
         oaipmh_dict = collections.OrderedDict()
 
@@ -161,7 +160,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
             metadata_prefix = 'oai_dc'
         try:
             oai_pmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], unparse(xmldict))
-            
+
             # get the format
             metadata_format = MetadataFormats().get_metadata_formats(metadata_prefix)[0]
 
@@ -183,7 +182,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
 
     def __repr__(self):
         return str(self)
-    
+ 
     def __str__(self):
         return unicode(self).encode('utf-8') 
 

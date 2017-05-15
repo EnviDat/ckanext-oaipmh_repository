@@ -6,6 +6,7 @@ from ckanext.package_converter.logic import package_export_as_record
 import ckan.plugins.toolkit as toolkit
 
 from pylons import config
+import urllib
 
 from datetime import datetime
 import collections
@@ -38,13 +39,17 @@ class RecordAccessService(object):
         return(self._export_package(package_id, oai_identifier, datestamp, format))
 
     def list_records(self, format, start_date=None, end_date=None):
-        results = self._find_by_date(start_date, end_date)
-        log.debug(' list_records results ' + str(results))
+        offset = 0
+        results, size = self._find_by_date(start_date, end_date,  offset = offset)
+        #log.debug(' list_records results ' + str(results))
         if not results:
             raise oaipmh_error.NoRecordsMatchError()
         
         record_list = {'record':[]}
         
+        if size != len(results):
+            log.debug(self. _get_ressumption_token(start_date, end_date, format, offset, len(results), size))
+
         for result in results:
             package_id = result.get('id')
             datestamp = result.get('datestamp')
@@ -67,7 +72,7 @@ class RecordAccessService(object):
     def _export_package(self, package_id, oai_identifier, datestamp, format):
         # Convert record
         try:
-            log.debug(' Found package_id = {0}'.format(package_id))
+            #log.debug(' Found package_id = {0}'.format(package_id))
             converted_record = package_export_as_record(package_id, format)
             record = XMLRecord.from_record(converted_record)
 
@@ -122,18 +127,19 @@ class RecordAccessService(object):
             except:
                 raise oaipmh_error.BadArgumentError('Datestamp is expected one of the following formats: YYYY-MM-DDThh:mm:ssZ OR YYYY-MM-DD')
 
-    def _find_by_date(self, start_date, end_date):
+    def _find_by_date(self, start_date, end_date, offset=0):
         #TODO: Add link to DB behind firewall!!
         #TODO: Add tokens (limit to 100 rows)
-        max_results = 100
+        max_results = 10
         results = []
+        size = 0
         packages_found = []
         try:
             conn = ckan_search.make_connection()
 
             # compatibility ckan 2.5 and 2.6
             query_text = '{0}:{1}'.format(self.id_field, self.regex if self.regex else '*')
-            
+
             if start_date or end_date:
                 start_date_str = self._format_date(start_date)
                 end_date_str = self._format_date(end_date)
@@ -141,18 +147,24 @@ class RecordAccessService(object):
 
             log.debug(query_text)
             if callable(getattr(conn, "query", None)):
-                response = conn.query(query_text, 
-                                       fq='state:active site_id:%s' % config.get('ckan.site_id'), 
+                # CKAN 2.5
+                response = conn.query(query_text,
+                                       fq='state:active site_id:%s' % config.get('ckan.site_id'),
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
-                                       rows=max_results)
+                                       rows=max_results, start=offset)
                 results = response.results
+                #log.debug('Got {0} to {1} results out of {2}'.format(type(response.results.start), type(response.results.start+len(results)), type(response.results.numFound)))
+                size = int(response.results.numFound)
+                log.debug('Got {0} to {1} results out of {2}'.format(offset, offset+len(results), size))
             else:
+                # CKAN 2.6
                 response = conn.search(query_text,
-                                       fq='state:active site_id:%s' % config.get('ckan.site_id'), 
+                                       fq='state:active site_id:%s' % config.get('ckan.site_id'),
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
-                                       rows=max_results)
+                                       rows=max_results, start=offset)
                 results = response.docs
-            
+                log.debug('response (docs) {0}'.format(response))
+
             for result in results:
                 package_id = result['id']
                 metadata_modified = result.get('metadata_modified')
@@ -162,11 +174,35 @@ class RecordAccessService(object):
             raise e
         except Exception, e:
             log.exception(e)
-            return []
+            return [],0
         #finally:
         #    if 'conn' in dir():
         #        conn.close()
-        return packages_found
+        return packages_found, size
+
+    def _get_ressumption_token(self, start_date, end_date, format, offset, num_sent, size):
+
+
+       token = collections.OrderedDict()
+
+       token['@completeListSize'] = str(size)
+       token['@cursor'] = str(offset)
+
+       if (offset+num_sent)<size:
+           params_list = []
+           if start_date:
+               params_list += ['from={0}'.format(self._format_date(start_date))]
+
+           if not end_date:
+               end_date = datetime.now().strftime(self.dateformat)
+           params_list += ['until={0}'.format(self._format_date(end_date))]
+
+           params_list += ['metadataPrefix={0}'.format(format)]
+           params_list += ['offset={0}'.format(offset+num_sent)]
+           params_list += ['size={0}'.format(size)]
+           token['#text'] = urllib.quote(u'&'.join(params_list).encode('utf8'))
+
+       return ({'resumptionToken':token})
 
     def _envelop_record(self, identifier, datestamp, content):
         oaipmh_dict = collections.OrderedDict()
