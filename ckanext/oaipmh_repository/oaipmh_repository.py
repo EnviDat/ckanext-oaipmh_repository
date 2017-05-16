@@ -5,6 +5,7 @@ from datetime import datetime
 from xmltodict import unparse
 import collections
 import sys
+import urllib, urlparse
 
 from ckanext.package_converter.model.metadata_format import MetadataFormats, XMLMetadataFormat
 from ckanext.package_converter.model.record import XMLRecord, Record
@@ -32,7 +33,8 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         self.id_prefix = config.get('oaipmh_repository.id_prefix', 'oai:ckan:id:')
         self.id_field = config.get('oaipmh_repository.id_field', 'name')
         self.regex = config.get('oaipmh_repository.regex', '*')
-        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field, self.regex)
+        self.max_results = int(config.get('oaipmh_repository.max', '1000'))
+        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field, self.regex, self.max_results)
         log.debug(self)
 
     def handle_request(self, verb, params, url):
@@ -64,7 +66,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
     def identify(self, params={}):
         if params:
             raise oaipmh_error.BadArgumentError()
-        
+
         identify_dict = collections.OrderedDict()
         identify_dict['repositoryName'] = config.get('site.title') if config.get('site.title') else 'repository'
         identify_dict['baseURL'] = config.get('ckan.site_url') + url_for(controller='ckanext.oaipmh_repository.controller:OAIPMHController', action='index')
@@ -74,17 +76,6 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         identify_dict['deletedRecord'] = 'no'
         identify_dict['granularity'] ='YYYY-MM-DD'
         return identify_dict
-
-    def get_record(self, params):
-        if set(params.keys()).difference(['identifier','metadataPrefix']):
-            raise oaipmh_error.BadArgumentError()
-        return(self.record_access.get_record(params.get('identifier'), params.get('metadataPrefix')))
-
-    def list_identifiers(self, params):
-        self._validate_params_list(params)
-        return(self.record_access.list_identifiers(params.get('metadataPrefix'), 
-                                                   params.get('from'), 
-                                               	   params.get('until')))
 
     def list_metadata_formats(self, params):
         if set(params.keys()).difference(['identifier']):
@@ -104,24 +95,61 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                 formats_dict['metadataFormat'] += [format_dict]
         return formats_dict
 
-    def list_records(self, params):
-        self._validate_params_list(params)
-        return(self.record_access.list_records(params.get('metadataPrefix'), 
-                                               params.get('from'), 
-                                               params.get('until')))
+    def get_record(self, params):
+        if set(params.keys()).difference(['identifier','metadataPrefix']):
+            raise oaipmh_error.BadArgumentError()
+        return(self.record_access.get_record(params.get('identifier'), params.get('metadataPrefix')))
+
+    def list_identifiers(self, input_params):
+        params = self._validate_params_list(input_params)
+        return(self.record_access.list_identifiers(params.get('metadataPrefix'),
+                                                   params.get('from'),
+                                               	   params.get('until'),
+                                                   params.get('offset', 0)))
+
+
+    def list_records(self, input_params):
+        params = self._validate_params_list(input_params)
+        return(self.record_access.list_records(params.get('metadataPrefix'),
+                                               params.get('from'),
+                                               params.get('until'),
+                                               params.get('offset', 0)))
 
     def list_sets(self, params):
         raise oaipmh_error.NoSetHierarchyError()
         return {'#text': 'list_sets: implementation pending'}
 
     def _validate_params_list(self, params):
-        if set(params.keys()).difference(['metadataPrefix', 'from', 'until']):
+        # validate and replace from resumptionToken
+        if set(params.keys()).difference(['metadataPrefix', 'from', 'until', 'resumptionToken']):
             if 'set' in params.keys():
                 raise oaipmh_error.NoSetHierarchyError()
-            if 'resumptionToken' in params.keys():
-                raise oaipmh_error.BadResumptionTokenError()
             raise oaipmh_error.BadArgumentError()
-        return
+        if 'resumptionToken' in params.keys():
+            if len(params.keys())>1:
+                raise oaipmh_error.BadArgumentError('ResumptionToken can not be used together with other arguments')
+            else:
+                return self._params_from_token(params)
+        else:
+            if 'metadataPrefix' not in params.keys():
+                raise oaipmh_error.BadArgumentError('Missing required argument metadataPrefix')
+        return params
+
+    def _params_from_token(self, params):
+        try:
+            token_params = {}
+            token = params['resumptionToken']
+            uncoded_token = urllib.unquote(token).decode('utf8')
+            log.debug(uncoded_token)
+            token_params_list = urlparse.parse_qs(uncoded_token)
+            token_params['metadataPrefix'] = token_params_list['metadataPrefix'][0]
+            token_params['offset'] = token_params_list['offset'][0]
+            token_params['until'] = token_params_list['until'][0]
+            if token_params_list.get('from'):
+                token_params['from'] = token_params_list['from'][0]
+            return token_params
+        except Exception as e:
+            raise oaipmh_error.BadResumptionTokenError(str(e))
 
     def _envelop(self, verb, params, url, content):
         oaipmh_dict = collections.OrderedDict()
@@ -134,12 +162,12 @@ class OAIPMHRepository(plugins.SingletonPlugin):
 
         oaipmh_dict['OAI-PMH']['responseDate'] = datetime.now().strftime(self.dateformat) #'2017-02-08T12:00:01Z'
         oaipmh_dict['OAI-PMH']['request'] = collections.OrderedDict()
-        oaipmh_dict['OAI-PMH']['request']['#text'] = str(url).split('?')[0] 
+        oaipmh_dict['OAI-PMH']['request']['#text'] = str(url).split('?')[0]
 
         if (verb != 'error'):
             oaipmh_dict['OAI-PMH']['request']['@verb'] = verb
 
-            if len(params)>1:
+            if len(params)>=1:
                 for param in params:
                     if param != 'verb':
                         oaipmh_dict['OAI-PMH']['request']['@'+str(param)] = str(params[param])
@@ -163,7 +191,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
 
             # get the format
             metadata_format = MetadataFormats().get_metadata_formats(metadata_prefix)[0]
-
+            # modify xsd due to library bug
             fixed_xsd = '''<xs:schema xmlns="http://www.openarchives.org/OAI/2.0/"
                                   xmlns:xs="http://www.w3.org/2001/XMLSchema"
                                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -182,18 +210,20 @@ class OAIPMHRepository(plugins.SingletonPlugin):
 
     def __repr__(self):
         return str(self)
- 
+
     def __str__(self):
-        return unicode(self).encode('utf-8') 
+        return unicode(self).encode('utf-8')
 
     def __unicode__(self):
-        return (u'''OAIPMHRepository: granularity = {dateformat}, 
-                                      prefix = {id_prefix}, id_field = {id_field}, 
-                                      verb_handlers = {handlers}''').format(
-                                      dateformat=self.dateformat, 
-                                      id_prefix=self.id_prefix, 
-                                      id_field=self.id_field, 
-                                      handlers=self.verb_handlers.keys())
+        return (u'''OAIPMHRepository: granularity = {dateformat},
+                                      prefix = {id_prefix}, id_field = {id_field},
+                                      verb_handlers = {handlers},
+                                      max_results = {max_results}''').format(
+                                      dateformat=self.dateformat,
+                                      id_prefix=self.id_prefix,
+                                      id_field=self.id_field,
+                                      handlers=self.verb_handlers.keys(),
+                                      max_results=self.max_results)
 
 
 

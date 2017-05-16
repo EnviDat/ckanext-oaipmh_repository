@@ -1,4 +1,3 @@
-#from ckan.logic.action import package_search
 import ckan.lib.search.common as ckan_search
 from ckanext.package_converter.model.metadata_format import MetadataFormats
 from ckanext.package_converter.model.record import JSONRecord, XMLRecord
@@ -17,18 +16,18 @@ import logging
 log = logging.getLogger(__name__)
 
 class RecordAccessService(object):
-    def __init__(self, dateformat, id_prefix, id_field, regex):
+    def __init__(self, dateformat, id_prefix, id_field, regex, max_results = 1000):
         self.dateformat = dateformat
         self.id_prefix = id_prefix
         self.id_field = id_field
         self.regex = regex
+        self.max_results = max_results
 
     def get_record(self, oai_identifier, format):
         # Get record
         id = self._get_ckan_id(oai_identifier)
 
         result = self._find_by_field(id)
-        log.debug(' get Record  result= '+ str(result))
 
         if not result:
             raise oaipmh_error.IdDoesNotExistError()
@@ -38,37 +37,46 @@ class RecordAccessService(object):
 
         return(self._export_package(package_id, oai_identifier, datestamp, format))
 
-    def list_records(self, format, start_date=None, end_date=None):
-        offset = 0
+    def list_records(self, format, start_date=None, end_date=None, offset = 0):
         results, size = self._find_by_date(start_date, end_date,  offset = offset)
-        #log.debug(' list_records results ' + str(results))
+
         if not results:
             raise oaipmh_error.NoRecordsMatchError()
-        
-        record_list = {'record':[]}
-        
-        if size != len(results):
-            log.debug(self. _get_ressumption_token(start_date, end_date, format, offset, len(results), size))
+
+        record_list = collections.OrderedDict()
+        record_list['record'] = []
 
         for result in results:
             package_id = result.get('id')
             datestamp = result.get('datestamp')
             oai_identifier = self._get_oaipmh_id(result.get(self.id_field))
             record_list['record'] += [self._export_package(package_id, oai_identifier, datestamp, format)['record']]
+
+        if size != len(results):
+            token = self._get_ressumption_token(start_date, end_date, format, offset, len(results), size)
+            log.debug(token)
+            record_list['resumptionToken'] = token['resumptionToken']
+
         return record_list
-    
-    def list_identifiers(self, format, start_date=None, end_date=None):
-        results = self.list_records(format, start_date, end_date)
+
+    def list_identifiers(self, format, start_date=None, end_date=None, offset=0):
+        results = self.list_records(format, start_date, end_date, offset=offset)
 
         if not results:
             raise oaipmh_error.NoRecordsMatchError()
-        
-        identifiers_list = {'header':[]}
-        
+
+        identifiers_list =  collections.OrderedDict()
+        identifiers_list['header'] = []
+
         for result in results.get('record',[]):
             identifiers_list['header'] += [result['header']]
+
+        if  results.get('resumptionToken', False):
+            identifiers_list['resumptionToken'] = results.get('resumptionToken')
+
         return identifiers_list
-    
+
+
     def _export_package(self, package_id, oai_identifier, datestamp, format):
         # Convert record
         try:
@@ -111,11 +119,8 @@ class RecordAccessService(object):
         except Exception, e:
             log.exception(e)
             return {}
-        #finally:
-        #    if 'conn' in dir():
-        #        conn.close()
         return {'id':package_id, 'datestamp':metadata_modified }
-    
+
     def _format_date(self, date_input):
         if not date_input:
             return '*'
@@ -129,8 +134,8 @@ class RecordAccessService(object):
 
     def _find_by_date(self, start_date, end_date, offset=0):
         #TODO: Add link to DB behind firewall!!
-        #TODO: Add tokens (limit to 100 rows)
-        max_results = 10
+        offset = int(offset)
+        max_results = self.max_results
         results = []
         size = 0
         packages_found = []
@@ -145,7 +150,7 @@ class RecordAccessService(object):
                 end_date_str = self._format_date(end_date)
                 query_text += ' metadata_modified:[{0} TO {1}]'.format(start_date_str, end_date_str)
 
-            log.debug(query_text)
+            #log.debug(query_text)
             if callable(getattr(conn, "query", None)):
                 # CKAN 2.5
                 response = conn.query(query_text,
@@ -153,7 +158,6 @@ class RecordAccessService(object):
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
                                        rows=max_results, start=offset)
                 results = response.results
-                #log.debug('Got {0} to {1} results out of {2}'.format(type(response.results.start), type(response.results.start+len(results)), type(response.results.numFound)))
                 size = int(response.results.numFound)
                 log.debug('Got {0} to {1} results out of {2}'.format(offset, offset+len(results), size))
             else:
@@ -163,7 +167,6 @@ class RecordAccessService(object):
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
                                        rows=max_results, start=offset)
                 results = response.docs
-                log.debug('response (docs) {0}'.format(response))
 
             for result in results:
                 package_id = result['id']
@@ -175,14 +178,11 @@ class RecordAccessService(object):
         except Exception, e:
             log.exception(e)
             return [],0
-        #finally:
-        #    if 'conn' in dir():
-        #        conn.close()
+
         return packages_found, size
 
     def _get_ressumption_token(self, start_date, end_date, format, offset, num_sent, size):
-
-
+       offset = int(offset)
        token = collections.OrderedDict()
 
        token['@completeListSize'] = str(size)
