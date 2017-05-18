@@ -17,12 +17,13 @@ import logging
 log = logging.getLogger(__name__)
 
 class RecordAccessService(object):
-    def __init__(self, dateformat, id_prefix, id_field, regex, max_results = 1000):
+    def __init__(self, dateformat, id_prefix, id_field, regex, max_results = 1000, local_tz='Europe/Berlin'):
         self.dateformat = dateformat
         self.id_prefix = id_prefix
         self.id_field = id_field
         self.regex = regex
         self.max_results = max_results
+        self.local_tz=pytz.timezone(local_tz)
 
     def get_record(self, oai_identifier, format):
         # Get record
@@ -99,6 +100,18 @@ class RecordAccessService(object):
     def _get_ckan_id(self, oai_id):
         return (oai_id.split(self.id_prefix)[-1])
 
+    def _utc_to_local(self, date_utc):
+        return date_utc.replace(tzinfo=pytz.utc).astimezone(self.local_tz)
+
+    def _local_to_utc(self, date_local):
+        try:
+            date_local_tz = self.local_tz.localize(date_local)
+            date_local_tz_norm = self.local_tz.normalize(date_local_tz)
+            return date_local_tz_norm.astimezone(pytz.utc)
+        except Exception as e:
+            log.debug(e)
+            raise
+
     def _find_by_field(self, id):
         #TODO: Replace with link to DB behind firewall!!
         field = self.id_field
@@ -116,18 +129,22 @@ class RecordAccessService(object):
                 results = response.docs
             #log.debug(results)
             package_id = results[0]['id']
-            metadata_modified = results[0].get('metadata_modified')
+            metadata_modified = self._utc_to_local(results[0].get('metadata_modified'))
         except Exception, e:
             log.exception(e)
             return {}
         return {'id':package_id, 'datestamp':metadata_modified }
 
-    def _format_date(self, date_input, offset=0):
+    def _format_date(self, date_input, offset=0, to_utc=False):
         if not date_input:
             return '*'
-        
+
         try:
-            return(datetime.strptime(date_input, self.dateformat).strftime(self.dateformat))
+            local_dt = datetime.strptime(date_input, self.dateformat)
+            if to_utc:
+                return(self._local_to_utc(local_dt).strftime(self.dateformat))
+            else:
+                return(local_dt.strftime(self.dateformat))
         except:
             try:
                 return(datetime.strptime(date_input, "%Y-%m-%d").strftime(self.dateformat))
@@ -148,8 +165,8 @@ class RecordAccessService(object):
             query_text = '{0}:{1}'.format(self.id_field, self.regex if self.regex else '*')
 
             if start_date or end_date:
-                start_date_str = self._format_date(start_date)
-                end_date_str = self._format_date(end_date)
+                start_date_str = self._format_date(start_date, to_utc=True)
+                end_date_str = self._format_date(end_date, to_utc=True)
                 query_text += ' metadata_modified:[{0} TO {1}]'.format(start_date_str, end_date_str)
 
             #log.debug(query_text)
@@ -172,7 +189,7 @@ class RecordAccessService(object):
 
             for result in results:
                 package_id = result['id']
-                metadata_modified = result.get('metadata_modified')
+                metadata_modified = self._utc_to_local(result.get('metadata_modified'))
                 value = result.get(self.id_field) if result.get(self.id_field) else result.get('extras_' + self.id_field)
                 packages_found += [{'id':package_id, 'datestamp':metadata_modified, self.id_field:value}]
         except oaipmh_error.OAIPMHError, e:
