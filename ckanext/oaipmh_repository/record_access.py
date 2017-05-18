@@ -6,6 +6,7 @@ import ckan.plugins.toolkit as toolkit
 
 from pylons import config
 import urllib
+import pytz
 
 from datetime import datetime
 import collections
@@ -121,9 +122,10 @@ class RecordAccessService(object):
             return {}
         return {'id':package_id, 'datestamp':metadata_modified }
 
-    def _format_date(self, date_input):
+    def _format_date(self, date_input, offset=0):
         if not date_input:
             return '*'
+        
         try:
             return(datetime.strptime(date_input, self.dateformat).strftime(self.dateformat))
         except:

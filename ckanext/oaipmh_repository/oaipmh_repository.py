@@ -96,7 +96,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         return formats_dict
 
     def get_record(self, params):
-        if set(params.keys()).difference(['identifier','metadataPrefix']):
+        if set(params.keys()) != set(['identifier','metadataPrefix']):
             raise oaipmh_error.BadArgumentError()
         return(self.record_access.get_record(params.get('identifier'), params.get('metadataPrefix')))
 
