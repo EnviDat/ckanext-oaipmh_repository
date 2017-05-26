@@ -137,8 +137,8 @@ class RecordAccessService(object):
             # check with doi index
             for result in results:
                 package_id = result['id']
-                package_doi = result['extras_doi']
                 if self.doi_index:
+                    package_doi = result['extras_'+field]
                     log.debug(self.doi_index)
                     log.debug('_find_by_field CHECK package_doi = {0}, package_id = {1}'.format(package_doi, package_id))
                     if not self.doi_index.check_doi(package_doi, package_id):
@@ -205,8 +205,8 @@ class RecordAccessService(object):
 
             for result in results:
                 package_id = result['id']
-                package_doi = result['extras_doi']
                 if self.doi_index:
+                    package_doi = result['extras_'+self.id_field]
                     log.debug(self.doi_index)
                     log.debug('_find_by_field CHECK package_doi = {0}, package_id = {1}'.format(package_doi, package_id))
                     if not self.doi_index.check_doi(package_doi, package_id):

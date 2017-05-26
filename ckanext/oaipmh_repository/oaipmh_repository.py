@@ -36,9 +36,12 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         self.max_results = int(config.get('oaipmh_repository.max', '1000'))
         self.doi_index_url = config.get('oaipmh_repository.sqlalchemy.url')
         self.doi_index_site_id = config.get('oaipmh_repository.site_id')
-
-        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field, self.regex, self.max_results, 
-                                                 [self.doi_index_url, self.doi_index_site_id])
+        doi_index_params = []
+        if (self.doi_index_url and self.doi_index_site_id):
+            doi_index_params = [self.doi_index_url, self.doi_index_site_id]
+        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field, 
+                                                 self.regex, self.max_results, 
+                                                 doi_index_params)
         log.debug(self)
 
     def handle_request(self, verb, params, url):
