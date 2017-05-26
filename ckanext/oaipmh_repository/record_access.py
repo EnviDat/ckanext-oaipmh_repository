@@ -124,14 +124,16 @@ class RecordAccessService(object):
             conn = ckan_search.make_connection()
             # compatibility ckan 2.5 and 2.6
             if callable(getattr(conn, "query", None)):
-                response = conn.query("{0}:{1}".format(field, id), fq='state:active',
+                response = conn.query("{0}:{1}".format(field, id),
+                                       fq='state:active site_id:%s capacity:public' % config.get('ckan.site_id'),
                                        fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field),
                                        rows=self.max_results)
                 results = response.results
             else:
-                response = conn.search("{0}:{1}".format(field, id), fq='state:active',
+                response = conn.search("{0}:{1}".format(field, id),
+                                       fq='state:active site_id:%s capacity:public' % config.get('ckan.site_id'),
                                        fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field),
-                                      rows=self.max_results)
+                                       rows=self.max_results)
                 results = response.docs
             #log.debug(results)
             # check with doi index
@@ -188,7 +190,7 @@ class RecordAccessService(object):
             if callable(getattr(conn, "query", None)):
                 # CKAN 2.5
                 response = conn.query(query_text,
-                                       fq='state:active site_id:%s' % config.get('ckan.site_id'),
+                                       fq='state:active site_id:%s capacity:public' % config.get('ckan.site_id'),
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
                                        rows=max_results, start=offset)
                 results = response.results
@@ -197,7 +199,7 @@ class RecordAccessService(object):
             else:
                 # CKAN 2.6
                 response = conn.search(query_text,
-                                       fq='state:active site_id:%s' % config.get('ckan.site_id'),
+                                       fq='state:active site_id:%s capacity:public' % config.get('ckan.site_id'),
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
                                        rows=max_results, start=offset)
                 results = response.docs
