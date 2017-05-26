@@ -1,6 +1,9 @@
 import sqlalchemy
 import sys
 
+import logging
+log = logging.getLogger(__name__)
+
 class OAIPMHDOIIndex(object):
     def __init__(self, url, site_id):
         self.url = url
@@ -13,24 +16,29 @@ class OAIPMHDOIIndex(object):
         suffix = doi.split('/',1)[1]
         doi_realisation = self.meta.tables['doi_realisation']
 
+        log.debug('check_doi doi = {0}, ckan_id = {1}, site_id = "{2}"'.format(doi, ckan_id, self.site_id))
+
         clause = sqlalchemy.select([doi_realisation.c.prefix,
                                     doi_realisation.c.suffix]
                                    ).where(doi_realisation.c.site_id == self.site_id).where(doi_realisation.c.ckan_id == ckan_id)
         results = self.con.execute(clause).fetchall()
+        log.debug(results)
         if not results:
-           print('WARNING: CKAN ID not found: {ckan_id}'.format(ckan_id=ckan_id))
+           log.warn('CKAN ID not found: {ckan_id}'.format(ckan_id=ckan_id))
            return(False)
-        
+
         for row in results:
             db_prefix=str(row[0][0])
             db_suffix=str(row[1])
             if(prefix==db_prefix) and (suffix==db_suffix):
+                log.debug('Check CKAN ID-DOI OK!! : {prefix}/{suffix}: {ckan_id}'.format(prefix=db_prefix,
+                                                      suffix=db_suffix, ckan_id=ckan_id))
                 return True
-            print('ERROR: CKAN ID linked to another DOI: {prefix}/{suffix}: {ckan_id}'.format(prefix=db_prefix,
+            log.error('CKAN ID linked to another DOI: {prefix}/{suffix}: {ckan_id}'.format(prefix=db_prefix,
                                                      suffix=db_suffix,
                                                      ckan_id=ckan_id))
         return(False)
-         
+
     def __repr__(self):
         return str(self)
 

@@ -34,7 +34,11 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         self.id_field = config.get('oaipmh_repository.id_field', 'name')
         self.regex = config.get('oaipmh_repository.regex', '*')
         self.max_results = int(config.get('oaipmh_repository.max', '1000'))
-        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field, self.regex, self.max_results)
+        self.doi_index_url = config.get('oaipmh_repository.sqlalchemy.url')
+        self.doi_index_site_id = config.get('oaipmh_repository.site_id')
+
+        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field, self.regex, self.max_results, 
+                                                 [self.doi_index_url, self.doi_index_site_id])
         log.debug(self)
 
     def handle_request(self, verb, params, url):
@@ -218,12 +222,16 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         return (u'''OAIPMHRepository: granularity = {dateformat},
                                       prefix = {id_prefix}, id_field = {id_field},
                                       verb_handlers = {handlers},
-                                      max_results = {max_results}''').format(
+                                      max_results = {max_results},
+                                      doi_index_url = {doi_index_url},
+                                       doi_index_site_id = {doi_index_site_id}''').format(
                                       dateformat=self.dateformat,
                                       id_prefix=self.id_prefix,
                                       id_field=self.id_field,
                                       handlers=self.verb_handlers.keys(),
-                                      max_results=self.max_results)
+                                      max_results=self.max_results,
+                                      doi_index_url = self.doi_index_url,
+                                      doi_index_site_id = self.doi_index_site_id)
 
 
 

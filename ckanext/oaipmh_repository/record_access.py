@@ -12,18 +12,23 @@ from datetime import datetime
 import collections
 
 import oaipmh_error
+from doi_db_index import OAIPMHDOIIndex
 
 import logging
 log = logging.getLogger(__name__)
 
 class RecordAccessService(object):
-    def __init__(self, dateformat, id_prefix, id_field, regex, max_results = 1000, local_tz='Europe/Berlin'):
+    def __init__(self, dateformat, id_prefix, id_field, regex, max_results = 1000, doi_index_params=[], local_tz='Europe/Berlin'):
         self.dateformat = dateformat
         self.id_prefix = id_prefix
         self.id_field = id_field
         self.regex = regex
         self.max_results = max_results
         self.local_tz=pytz.timezone(local_tz)
+        self.doi_index = None
+        log.debug(doi_index_params)
+        if doi_index_params:
+            self.doi_index = OAIPMHDOIIndex(doi_index_params[0], doi_index_params[1])
 
     def get_record(self, oai_identifier, format):
         # Get record
@@ -113,27 +118,37 @@ class RecordAccessService(object):
             raise
 
     def _find_by_field(self, id):
-        #TODO: Replace with link to DB behind firewall!!
         field = self.id_field
         results = []
         try:
             conn = ckan_search.make_connection()
             # compatibility ckan 2.5 and 2.6
             if callable(getattr(conn, "query", None)):
-                response = conn.query("{0}:{1}".format(field, id), fq='state:active', 
-                                       fields='id, state, extras_doi, metadata_modified, {0}'.format(field), rows=1)
+                response = conn.query("{0}:{1}".format(field, id), fq='state:active',
+                                       fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field),
+                                       rows=self.max_results)
                 results = response.results
             else:
-                response = conn.search("{0}:{1}".format(field, id), fq='state:active', 
-                                       fields='id, state, extras_doi, metadata_modified, {0}'.format(field), rows=1)
+                response = conn.search("{0}:{1}".format(field, id), fq='state:active',
+                                       fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field),
+                                      rows=self.max_results)
                 results = response.docs
             #log.debug(results)
-            package_id = results[0]['id']
-            metadata_modified = self._utc_to_local(results[0].get('metadata_modified'))
+            # check with doi index
+            for result in results:
+                package_id = result['id']
+                package_doi = result['extras_doi']
+                if self.doi_index:
+                    log.debug(self.doi_index)
+                    log.debug('_find_by_field CHECK package_doi = {0}, package_id = {1}'.format(package_doi, package_id))
+                    if not self.doi_index.check_doi(package_doi, package_id):
+                        continue
+                metadata_modified = self._utc_to_local(result.get('metadata_modified'))
+                return {'id':package_id, 'datestamp':metadata_modified }
         except Exception, e:
             log.exception(e)
-            return {}
-        return {'id':package_id, 'datestamp':metadata_modified }
+
+        return {}
 
     def _format_date(self, date_input, offset=0, to_utc=False):
         if not date_input:
@@ -186,9 +201,16 @@ class RecordAccessService(object):
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
                                        rows=max_results, start=offset)
                 results = response.docs
+                size = int(response.docs.numFound)
 
             for result in results:
                 package_id = result['id']
+                package_doi = result['extras_doi']
+                if self.doi_index:
+                    log.debug(self.doi_index)
+                    log.debug('_find_by_field CHECK package_doi = {0}, package_id = {1}'.format(package_doi, package_id))
+                    if not self.doi_index.check_doi(package_doi, package_id):
+                        continue
                 metadata_modified = self._utc_to_local(result.get('metadata_modified'))
                 value = result.get(self.id_field) if result.get(self.id_field) else result.get('extras_' + self.id_field)
                 packages_found += [{'id':package_id, 'datestamp':metadata_modified, self.id_field:value}]
