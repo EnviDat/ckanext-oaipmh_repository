@@ -203,7 +203,7 @@ class RecordAccessService(object):
                                        fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
                                        rows=max_results, start=offset)
                 results = response.docs
-                size = int(response.docs.numFound)
+                size = len(response.docs)
 
             for result in results:
                 package_id = result['id']
