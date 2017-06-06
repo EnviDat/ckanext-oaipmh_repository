@@ -18,6 +18,7 @@ import logging
 log = logging.getLogger(__name__)
 
 class RecordAccessService(object):
+
     def __init__(self, dateformat, id_prefix, id_field, regex, max_results = 1000, doi_index_params=[], local_tz='Europe/Berlin'):
         self.dateformat = dateformat
         self.id_prefix = id_prefix
@@ -121,21 +122,12 @@ class RecordAccessService(object):
         field = self.id_field
         results = []
         try:
-            conn = ckan_search.make_connection()
-            # compatibility ckan 2.5 and 2.6
-            if callable(getattr(conn, "query", None)):
-                response = conn.query("{0}:{1}".format(field, id),
-                                       fq='state:active site_id:%s capacity:public' % config.get('ckan.site_id'),
-                                       fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field),
-                                       rows=self.max_results)
-                results = response.results
-            else:
-                response = conn.search("{0}:{1}".format(field, id),
-                                       fq='state:active site_id:%s capacity:public' % config.get('ckan.site_id'),
-                                       fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field),
-                                       rows=self.max_results)
-                results = response.docs
-            #log.debug(results)
+            # search within packages
+            query_text = "{0}:{1}".format(field, id)
+            field_query = 'state:active site_id:%s capacity:public' % config.get('ckan.site_id')
+            fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field)
+            results,size = self._solr_query(query_text, field_query, fields)
+            #TODO: Search within resources
             # check with doi index
             for result in results:
                 package_id = result['id']
@@ -176,7 +168,6 @@ class RecordAccessService(object):
         size = 0
         packages_found = []
         try:
-            conn = ckan_search.make_connection()
 
             # compatibility ckan 2.5 and 2.6
             query_text = '{0}:{1}'.format(self.id_field, self.regex if self.regex else '*')
@@ -186,36 +177,26 @@ class RecordAccessService(object):
                 end_date_str = self._format_date(end_date, to_utc=True)
                 query_text += ' metadata_modified:[{0} TO {1}]'.format(start_date_str, end_date_str)
 
-            #log.debug(query_text)
-            if callable(getattr(conn, "query", None)):
-                # CKAN 2.5
-                response = conn.query(query_text,
-                                       fq='state:active site_id:%s capacity:public' % config.get('ckan.site_id'),
-                                       fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
-                                       rows=max_results, start=offset)
-                results = response.results
-                size = int(response.results.numFound)
-                log.debug('Got {0} to {1} results out of {2}'.format(offset, offset+len(results), size))
-            else:
-                # CKAN 2.6
-                response = conn.search(query_text,
-                                       fq='state:active site_id:%s capacity:public' % config.get('ckan.site_id'),
-                                       fields='id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field),
-                                       rows=max_results, start=offset)
-                results = response.docs
-                size = len(response.docs)
+            field_query = 'state:active site_id:%s capacity:public' % config.get('ckan.site_id')
+            fields = 'id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field)
+
+            results,size = self._solr_query(query_text, field_query, fields, offset)
 
             for result in results:
                 package_id = result['id']
                 if self.doi_index:
                     package_doi = result['extras_'+self.id_field]
-                    log.debug(self.doi_index)
-                    log.debug('_find_by_field CHECK package_doi = {0}, package_id = {1}'.format(package_doi, package_id))
                     if not self.doi_index.check_doi(package_doi, package_id):
                         continue
                 metadata_modified = self._utc_to_local(result.get('metadata_modified'))
                 value = result.get(self.id_field) if result.get(self.id_field) else result.get('extras_' + self.id_field)
                 packages_found += [{'id':package_id, 'datestamp':metadata_modified, self.id_field:value}]
+
+            #TODO: Search within resources
+            log.debug('\nRESOURCES\n')
+            resources_list = toolkit.get_action('resource_search')({}, {'query': 'doi:10.16904/'})
+            log.debug(resources_list)
+
         except oaipmh_error.OAIPMHError, e:
             raise e
         except Exception, e:
@@ -223,6 +204,26 @@ class RecordAccessService(object):
             return [],0
 
         return packages_found, size
+
+    def _solr_query(self, query_text, field_query, fields, offset=0):
+        results = []
+        size = 0
+
+        conn = ckan_search.make_connection()
+        if callable(getattr(conn, "query", None)):
+            # CKAN 2.5
+            response = conn.query(query_text, fq=field_query, fields = fields,
+                                  rows=self.max_results, start=offset)
+            results = response.results
+            size = int(response.results.numFound)
+        else:
+            # CKAN 2.6
+            response = conn.search(query_text, fq=field_query, fields = fields,
+                                       rows=self.max_results, start=offset)
+            results = response.docs
+            size = len(response.docs)
+
+        return results,size
 
     def _get_ressumption_token(self, start_date, end_date, format, offset, num_sent, size):
        offset = int(offset)
@@ -269,4 +270,3 @@ class RecordAccessService(object):
         oaipmh_dict['header']['datestamp'] = datestamp.strftime(self.dateformat)
 
         return oaipmh_dict
-
