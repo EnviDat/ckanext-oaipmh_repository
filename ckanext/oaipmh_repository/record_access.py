@@ -1,7 +1,7 @@
 import ckan.lib.search.common as ckan_search
 from ckanext.package_converter.model.metadata_format import MetadataFormats
 from ckanext.package_converter.model.record import JSONRecord, XMLRecord
-from ckanext.package_converter.logic import package_export_as_record
+from ckanext.package_converter.logic import export_as_record
 import ckan.plugins.toolkit as toolkit
 
 from pylons import config
@@ -89,7 +89,7 @@ class RecordAccessService(object):
         # Convert record
         try:
             #log.debug(' Found package_id = {0}'.format(package_id))
-            converted_record = package_export_as_record(package_id, format)
+            converted_record = export_as_record(package_id, format, type='package')
             record = XMLRecord.from_record(converted_record)
 
         except Exception, e:
