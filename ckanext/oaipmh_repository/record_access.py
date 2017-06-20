@@ -33,17 +33,18 @@ class RecordAccessService(object):
 
     def get_record(self, oai_identifier, format):
         # Get record
-        id = self._get_ckan_id(oai_identifier)
+        value = self._get_ckan_field_value(oai_identifier)
 
-        result = self._find_by_field(id)
+        result = self._find_by_field(value)
 
         if not result:
             raise oaipmh_error.IdDoesNotExistError()
 
-        package_id = result.get('id')
+        ckan_id = result.get('id')
+        entity = result.get('entity')
         datestamp = result.get('datestamp')
 
-        return(self._export_package(package_id, oai_identifier, datestamp, format))
+        return(self._export_dataset(ckan_id, oai_identifier, datestamp, format))
 
     def list_records(self, format, start_date=None, end_date=None, offset = 0):
         results, size = self._find_by_date(start_date, end_date,  offset = offset)
@@ -58,7 +59,7 @@ class RecordAccessService(object):
             package_id = result.get('id')
             datestamp = result.get('datestamp')
             oai_identifier = self._get_oaipmh_id(result.get(self.id_field))
-            record_list['record'] += [self._export_package(package_id, oai_identifier, datestamp, format)['record']]
+            record_list['record'] += [self._export_dataset(package_id, oai_identifier, datestamp, format)['record']]
 
         if size != len(results):
             token = self._get_ressumption_token(start_date, end_date, format, offset, len(results), size)
@@ -85,7 +86,7 @@ class RecordAccessService(object):
         return identifiers_list
 
 
-    def _export_package(self, package_id, oai_identifier, datestamp, format):
+    def _export_dataset(self, package_id, oai_identifier, datestamp, format):
         # Convert record
         try:
             #log.debug(' Found package_id = {0}'.format(package_id))
@@ -103,7 +104,7 @@ class RecordAccessService(object):
     def _get_oaipmh_id(self, id):
         return('{prefix}{id}'.format(prefix=self.id_prefix, id=id))
 
-    def _get_ckan_id(self, oai_id):
+    def _get_ckan_field_value(self, oai_id):
         return (oai_id.split(self.id_prefix)[-1])
 
     def _utc_to_local(self, date_utc):
