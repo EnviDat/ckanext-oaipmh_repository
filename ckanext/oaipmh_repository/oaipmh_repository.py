@@ -39,8 +39,11 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         doi_index_params = []
         if (self.doi_index_url and self.doi_index_site_id):
             doi_index_params = [self.doi_index_url, self.doi_index_site_id]
+
+        self.doi_solr_url = config.get('oaipmh_repository.solr_url')
+
         self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field,
-                                                 self.regex, self.max_results, doi_index_params)
+                                                 self.regex, self.doi_solr_url, self.max_results, doi_index_params)
         log.debug(self)
 
     def handle_request(self, verb, params, url):
@@ -226,14 +229,16 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                                       verb_handlers = {handlers},
                                       max_results = {max_results},
                                       doi_index_url = {doi_index_url},
-                                      doi_index_site_id = {doi_index_site_id}''').format(
+                                      doi_index_site_id = {doi_index_site_id},
+                                      doi_solr_url = {doi_solr_url}''').format(
                                       dateformat=self.dateformat,
                                       id_prefix=self.id_prefix,
                                       id_field=self.id_field,
                                       handlers=self.verb_handlers.keys(),
                                       max_results=self.max_results,
                                       doi_index_url = ':'.join(self.doi_index_url.split(':')[0:2])+':***@' + self.doi_index_url.rsplit('@')[1],
-                                      doi_index_site_id = self.doi_index_site_id)
+                                      doi_index_site_id = self.doi_index_site_id,
+                                      doi_solr_url = self.doi_solr_url)
 
 
 

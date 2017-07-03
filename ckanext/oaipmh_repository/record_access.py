@@ -13,38 +13,50 @@ import collections
 
 import oaipmh_error
 from doi_db_index import OAIPMHDOIIndex
+from doi_solr_index import DoiSolrNode
 
 import logging
 log = logging.getLogger(__name__)
 
 class RecordAccessService(object):
 
-    def __init__(self, dateformat, id_prefix, id_field, regex, max_results = 1000, doi_index_params=[], local_tz='Europe/Berlin'):
+    def __init__(self, dateformat, id_prefix, id_field, regex, doi_solr_url, max_results = 1000, doi_index_params=[], local_tz='Europe/Berlin'):
         self.dateformat = dateformat
         self.id_prefix = id_prefix
         self.id_field = id_field
         self.regex = regex
         self.max_results = max_results
-        self.local_tz=pytz.timezone(local_tz)
         self.doi_index = None
-        log.debug(doi_index_params)
         if doi_index_params:
             self.doi_index = OAIPMHDOIIndex(doi_index_params[0], doi_index_params[1])
+        self.doi_solr = DoiSolrNode(doi_solr_url, local_tz)
 
     def get_record(self, oai_identifier, format):
+        log.debug('****** get_record ******')
         # Get record
         value = self._get_ckan_field_value(oai_identifier)
 
-        result = self._find_by_field(value)
+        log.debug('\t value: ' + value)
+        log.debug('\t id_field: ' + self.id_field)
 
-        if not result:
+        results, size = self.doi_solr.query_by_field(self.id_field, value)
+        log.debug('\t results: {result} type={type}'.format(result=results, type=type(results)))
+
+
+        if not results:
             raise oaipmh_error.IdDoesNotExistError()
+        else:
+            result = results[0]
 
-        ckan_id = result.get('id')
-        entity = result.get('entity')
-        datestamp = result.get('datestamp')
+        log.debug('\t result: {result} type={type}'.format(result=result, type=type(result)))
 
-        return(self._export_dataset(ckan_id, oai_identifier, datestamp, format))
+        ckan_id = result['package_id']
+        entity = result['entity']
+        if entity == 'resource':
+            ckan_id = result['resource_id']
+        datestamp = result['datestamp']
+
+        return(self._export_dataset(ckan_id, entity, oai_identifier, datestamp, format))
 
     def list_records(self, format, start_date=None, end_date=None, offset = 0):
         results, size = self._find_by_date(start_date, end_date,  offset = offset)
@@ -86,11 +98,11 @@ class RecordAccessService(object):
         return identifiers_list
 
 
-    def _export_dataset(self, package_id, oai_identifier, datestamp, format):
+    def _export_dataset(self, ckan_id, entity, oai_identifier, datestamp, format):
         # Convert record
         try:
             #log.debug(' Found package_id = {0}'.format(package_id))
-            converted_record = export_as_record(package_id, format, type='package')
+            converted_record = export_as_record(ckan_id, format, type=entity)
             record = XMLRecord.from_record(converted_record)
 
         except Exception, e:
@@ -107,59 +119,6 @@ class RecordAccessService(object):
     def _get_ckan_field_value(self, oai_id):
         return (oai_id.split(self.id_prefix)[-1])
 
-    def _utc_to_local(self, date_utc):
-        return date_utc.replace(tzinfo=pytz.utc).astimezone(self.local_tz)
-
-    def _local_to_utc(self, date_local):
-        try:
-            date_local_tz = self.local_tz.localize(date_local)
-            date_local_tz_norm = self.local_tz.normalize(date_local_tz)
-            return date_local_tz_norm.astimezone(pytz.utc)
-        except Exception as e:
-            log.debug(e)
-            raise
-
-    def _find_by_field(self, id):
-        field = self.id_field
-        results = []
-        try:
-            # search within packages
-            query_text = "{0}:{1}".format(field, id)
-            field_query = 'state:active site_id:%s capacity:public' % config.get('ckan.site_id')
-            fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field)
-            results,size = self._solr_query(query_text, field_query, fields)
-            #TODO: Search within resources
-            # check with doi index
-            for result in results:
-                package_id = result['id']
-                if self.doi_index:
-                    package_doi = result['extras_'+field]
-                    log.debug(self.doi_index)
-                    log.debug('_find_by_field CHECK package_doi = {0}, package_id = {1}'.format(package_doi, package_id))
-                    if not self.doi_index.check_doi(package_doi, package_id):
-                        continue
-                metadata_modified = self._utc_to_local(result.get('metadata_modified'))
-                return {'id':package_id, 'datestamp':metadata_modified }
-        except Exception, e:
-            log.exception(e)
-
-        return {}
-
-    def _format_date(self, date_input, offset=0, to_utc=False):
-        if not date_input:
-            return '*'
-
-        try:
-            local_dt = datetime.strptime(date_input, self.dateformat)
-            if to_utc:
-                return(self._local_to_utc(local_dt).strftime(self.dateformat))
-            else:
-                return(local_dt.strftime(self.dateformat))
-        except:
-            try:
-                return(datetime.strptime(date_input, "%Y-%m-%d").strftime(self.dateformat))
-            except:
-                raise oaipmh_error.BadArgumentError('Datestamp is expected one of the following formats: YYYY-MM-DDThh:mm:ssZ OR YYYY-MM-DD')
 
     def _find_by_date(self, start_date, end_date, offset=0):
         #TODO: Add link to DB behind firewall!!
@@ -206,25 +165,6 @@ class RecordAccessService(object):
 
         return packages_found, size
 
-    def _solr_query(self, query_text, field_query, fields, offset=0):
-        results = []
-        size = 0
-
-        conn = ckan_search.make_connection()
-        if callable(getattr(conn, "query", None)):
-            # CKAN 2.5
-            response = conn.query(query_text, fq=field_query, fields = fields,
-                                  rows=self.max_results, start=offset)
-            results = response.results
-            size = int(response.results.numFound)
-        else:
-            # CKAN 2.6
-            response = conn.search(query_text, fq=field_query, fields = fields,
-                                       rows=self.max_results, start=offset)
-            results = response.docs
-            size = len(response.docs)
-
-        return results,size
 
     def _get_ressumption_token(self, start_date, end_date, format, offset, num_sent, size):
        offset = int(offset)

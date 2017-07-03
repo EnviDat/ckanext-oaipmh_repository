@@ -14,13 +14,13 @@ class DoiSolrNode(object):
 
     def _make_connection(self):
         assert self.url is not None
-        return SolrConnection(solr_url)
+        return SolrConnection(self.url)
 
     def _solr_query(self, query_text, field_query, fields, max_rows, offset=0):
         results = []
         size = 0
 
-        conn = self.make_connection()
+        conn = self._make_connection()
         if callable(getattr(conn, "query", None)):
             # CKAN 2.5
             response = conn.query(query_text, fq=field_query, fields = fields,
