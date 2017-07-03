@@ -59,19 +59,39 @@ class RecordAccessService(object):
         return(self._export_dataset(ckan_id, entity, oai_identifier, datestamp, format))
 
     def list_records(self, format, start_date=None, end_date=None, offset = 0):
-        results, size = self._find_by_date(start_date, end_date,  offset = offset)
+        log.debug('****** list_records ******')
+        results, size = self.doi_solr.query(self.id_field, self.regex, start_date, end_date, offset, max_rows=self.max_results)
 
         if not results:
             raise oaipmh_error.NoRecordsMatchError()
+
+        log.debug('\t got {0} results'.format(size))
 
         record_list = collections.OrderedDict()
         record_list['record'] = []
 
         for result in results:
-            package_id = result.get('id')
-            datestamp = result.get('datestamp')
+            ckan_id = result['package_id']
+            entity = result['entity']
+            if entity == 'resource':
+                continue
+                ckan_id = result['resource_id']
+            datestamp = result['datestamp']
+
+            log.debug('\t - result {0} {1} {2}'.format(ckan_id, entity, result.get(self.id_field)))
+            log.debug(result.keys())
+            log.debug(self.id_field)
+            log.debug(result[self.id_field])
+
+
             oai_identifier = self._get_oaipmh_id(result.get(self.id_field))
-            record_list['record'] += [self._export_dataset(package_id, oai_identifier, datestamp, format)['record']]
+
+            if self.doi_index:
+                doi = result[self.id_field]
+                if not self.doi_index.check_doi(doi, ckan_id, entity):
+                    continue
+
+            record_list['record'] += [self._export_dataset(ckan_id, entity, oai_identifier, datestamp, format)]
 
         if size != len(results):
             token = self._get_ressumption_token(start_date, end_date, format, offset, len(results), size)
@@ -118,52 +138,6 @@ class RecordAccessService(object):
 
     def _get_ckan_field_value(self, oai_id):
         return (oai_id.split(self.id_prefix)[-1])
-
-
-    def _find_by_date(self, start_date, end_date, offset=0):
-        #TODO: Add link to DB behind firewall!!
-        offset = int(offset)
-        max_results = self.max_results
-        results = []
-        size = 0
-        packages_found = []
-        try:
-
-            # compatibility ckan 2.5 and 2.6
-            query_text = '{0}:{1}'.format(self.id_field, self.regex if self.regex else '*')
-
-            if start_date or end_date:
-                start_date_str = self._format_date(start_date, to_utc=True)
-                end_date_str = self._format_date(end_date, to_utc=True)
-                query_text += ' metadata_modified:[{0} TO {1}]'.format(start_date_str, end_date_str)
-
-            field_query = 'state:active site_id:%s capacity:public' % config.get('ckan.site_id')
-            fields = 'id, state, {0}, metadata_modified, {1}'.format('extras_' + self.id_field, self.id_field)
-
-            results,size = self._solr_query(query_text, field_query, fields, offset)
-
-            for result in results:
-                package_id = result['id']
-                if self.doi_index:
-                    package_doi = result['extras_'+self.id_field]
-                    if not self.doi_index.check_doi(package_doi, package_id):
-                        continue
-                metadata_modified = self._utc_to_local(result.get('metadata_modified'))
-                value = result.get(self.id_field) if result.get(self.id_field) else result.get('extras_' + self.id_field)
-                packages_found += [{'id':package_id, 'datestamp':metadata_modified, self.id_field:value}]
-
-            #TODO: Search within resources
-            log.debug('\nRESOURCES\n')
-            resources_list = toolkit.get_action('resource_search')({}, {'query': 'doi:10.16904/'})
-            log.debug(resources_list)
-
-        except oaipmh_error.OAIPMHError, e:
-            raise e
-        except Exception, e:
-            log.exception(e)
-            return [],0
-
-        return packages_found, size
 
 
     def _get_ressumption_token(self, start_date, end_date, format, offset, num_sent, size):
