@@ -18,10 +18,13 @@ from doi_solr_index import DoiSolrNode
 import logging
 log = logging.getLogger(__name__)
 
+import util
+
 class RecordAccessService(object):
 
     def __init__(self, dateformat, id_prefix, id_field, regex, doi_solr_url, max_results = 1000, doi_index_params=[], local_tz='Europe/Berlin'):
         self.dateformat = dateformat
+        self.local_tz = local_tz
         self.id_prefix = id_prefix
         self.id_field = id_field
         self.regex = regex
@@ -29,7 +32,7 @@ class RecordAccessService(object):
         self.doi_index = None
         if doi_index_params:
             self.doi_index = OAIPMHDOIIndex(doi_index_params[0], doi_index_params[1])
-        self.doi_solr = DoiSolrNode(doi_solr_url, local_tz)
+        self.doi_solr = DoiSolrNode(doi_solr_url, self.local_tz)
 
     def get_record(self, oai_identifier, format):
         log.debug('****** get_record ******')
@@ -150,11 +153,12 @@ class RecordAccessService(object):
        if (offset+num_sent)<size:
            params_list = []
            if start_date:
-               params_list += ['from={0}'.format(self._format_date(start_date))]
+               params_list += ['from={0}'.format(util.format_date(start_date, self.dateformat, self.local_tz))]
 
            if not end_date:
                end_date = datetime.now().strftime(self.dateformat)
-           params_list += ['until={0}'.format(self._format_date(end_date))]
+           log.debug("END DATE is " + str(end_date))
+           params_list += ['until={0}'.format(util.format_date(end_date, self.dateformat, self.local_tz))]
 
            params_list += ['metadataPrefix={0}'.format(format)]
            params_list += ['offset={0}'.format(offset+num_sent)]

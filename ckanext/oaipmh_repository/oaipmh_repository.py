@@ -49,18 +49,25 @@ class OAIPMHRepository(plugins.SingletonPlugin):
     def handle_request(self, verb, params, url):
         oaipmh_verb = 'error'
         try:
+            log.debug('****handle_request****')
+            log.debug(url)
+            log.debug(verb)
+            log.debug(params)
             handler = self.verb_handlers[verb]
+            log.debug(handler)
             content = handler(params)
             oaipmh_verb = verb
         except oaipmh_error.OAIPMHError as e:
             content = e.as_xml_dict()
         except KeyError as e:
-             content = oaipmh_error.BadVerbError().as_xml_dict()
+            log.debug(e)
+            log.debug(sys.exc_info())
+            content = oaipmh_error.BadVerbError().as_xml_dict()
         except:
-           e = sys.exc_info()[1]
-           code = type(e).__name__
-           message = str(e)
-           content = oaipmh_error.OAIPMHError(code,  message).as_xml_dict()
+            e = sys.exc_info()[1]
+            code = type(e).__name__
+            message = str(e)
+            content = oaipmh_error.OAIPMHError(code,  message).as_xml_dict()
 
         xmldict = self._envelop(oaipmh_verb, params, url, content)
 
