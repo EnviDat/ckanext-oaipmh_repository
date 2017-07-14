@@ -5,6 +5,7 @@ import ckan.plugins.toolkit as toolkit
 class Oaipmh_RepositoryPlugin(plugins.SingletonPlugin):
     plugins.implements(plugins.IConfigurer)
     plugins.implements(plugins.IRoutes, inherit=True)
+    plugins.implements(plugins.IPackageController, inherit=True)
 
     # IConfigurer
     def update_config(self, config_):
@@ -19,3 +20,13 @@ class Oaipmh_RepositoryPlugin(plugins.SingletonPlugin):
         controller = 'ckanext.oaipmh_repository.controller:OAIPMHController'
         map.connect('oai', '/oai', controller=controller, action='index')
 	return map
+
+    # IPackageController
+    def before_index(self, pkg_dict):
+        log.debug(' *** BEFORE INDEX ***')
+        #doi_solr_url = config.get('oaipmh_repository.solr_url')
+        #if doi_solr_url:
+            #log.debug('TODO call delta-import')
+            #url_delta = doi_solr_url + '/dataimport?command=delta-import&clean=false&wt=json'
+
+        return pkg_dict
