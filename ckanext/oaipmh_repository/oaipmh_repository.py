@@ -36,6 +36,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         self.max_results = int(config.get('oaipmh_repository.max', '1000'))
         self.doi_index_url = config.get('oaipmh_repository.sqlalchemy.url')
         self.doi_index_site_id = config.get('oaipmh_repository.site_id')
+        
         doi_index_params = []
         if (self.doi_index_url and self.doi_index_site_id):
             doi_index_params = [self.doi_index_url, self.doi_index_site_id]
@@ -49,10 +50,6 @@ class OAIPMHRepository(plugins.SingletonPlugin):
     def handle_request(self, verb, params, url):
         oaipmh_verb = 'error'
         try:
-            log.debug('****handle_request****')
-            log.debug(url)
-            log.debug(verb)
-            log.debug(params)
             handler = self.verb_handlers[verb]
             log.debug(handler)
             content = handler(params)
@@ -75,7 +72,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
             log.error('OAI-PMH Response Validation FAILED')
         else:
             log.debug('OAI-PMH Response Validation SUCCESS')
-            log.debug('OAI-PMH Response is ERROR = {0}'.format(self._is_error_oai_pmh_record(xmldict)))
+            log.debug('OAI-PMH Response is error? = {0}'.format(self._is_error_oai_pmh_record(xmldict)))
 
         return unparse(xmldict, pretty=True)
 
@@ -122,7 +119,6 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                                                    params.get('from'),
                                                	   params.get('until'),
                                                    params.get('offset', 0)))
-
 
     def list_records(self, input_params):
         params = self._validate_params_list(input_params)

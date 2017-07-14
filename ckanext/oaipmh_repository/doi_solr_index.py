@@ -1,21 +1,53 @@
-from solr import SolrConnection
-import pytz
 from datetime import datetime
 import oaipmh_error
+import util
 
 import logging
 log = logging.getLogger(__name__)
 
+try:
+    # CKAN 2.5
+    from solr import SolrConnection
+except:
+    # CKAN 2.6
+    import pysolr
+    import simplejson
+    import re
+
 class DoiSolrNode(object):
 
-    def __init__(self, url, local_tz='Europe/Berlin'):
+    def __init__(self, url, dateformat, local_tz='Europe/Berlin'):
         self.url = url
-        self.local_tz=pytz.timezone(local_tz)
+        self.dateformat = dateformat
+        self.local_tz=local_tz
 
     def _make_connection(self):
         assert self.url is not None
-        return SolrConnection(self.url)
+        try:
+            # CKAN 2.5
+            return SolrConnection(self.url)
+        except:
+            # CKAN 2.6
+            decoder = simplejson.JSONDecoder(object_hook=self.solr_datetime_decoder)
+            return pysolr.Solr(self.url, decoder=decoder)
+        
+    def solr_datetime_decoder(self, d):
+        for k, v in d.items():
+            if isinstance(v, basestring):
+                possible_datetime = re.search(pysolr.DATETIME_REGEX, v)
+                if possible_datetime:
+                    date_values = possible_datetime.groupdict()
+                    for dk, dv in date_values.items():
+                        date_values[dk] = int(dv)
 
+                    d[k] = datetime( date_values['year'],
+									 date_values['month'],
+									 date_values['day'],
+									 date_values['hour'],
+									 date_values['minute'],
+									 date_values['second'])
+        return d
+    
     def _solr_query(self, query_text, field_query, fields, max_rows, offset=0):
         results = []
         size = 0
@@ -32,7 +64,7 @@ class DoiSolrNode(object):
             response = conn.search(query_text, fq=field_query, fields = fields,
                                        rows=max_rows, start=offset)
             results = response.docs
-            size = len(response.docs)
+            size = int(response.hits)
 
         return results,size
 
@@ -46,8 +78,8 @@ class DoiSolrNode(object):
             query_text = "{0}:{1}".format(field, value if value else '*')
 
             if start_date or end_date:
-                start_date_str = self._format_date(start_date, to_utc=True)
-                end_date_str = self._format_date(end_date, to_utc=True)
+                start_date_str = util.format_date(start_date, self.dateformat, self.local_tz, to_utc=True)
+                end_date_str = util.format_date(end_date, self.dateformat, self.local_tz, to_utc=True)
                 query_text += ' metadata_modified:[{0} TO {1}]'.format(start_date_str, end_date_str)
 
             field_query = 'state:active capacity:public'
@@ -57,7 +89,7 @@ class DoiSolrNode(object):
             for result in results:
                 if not result.get(field):
                     result[field] = result.get('extras_'+field)
-                result['datestamp'] = self._utc_to_local(result.get('metadata_modified'))
+                result['datestamp'] = util.utc_to_local(result.get('metadata_modified'), self.local_tz)
             return results,size
 
         except oaipmh_error.OAIPMHError, e:
@@ -65,32 +97,3 @@ class DoiSolrNode(object):
         except Exception, e:
             log.exception(e)
             return [],0
-
-    def _utc_to_local(self, date_utc):
-        return date_utc.replace(tzinfo=pytz.utc).astimezone(self.local_tz)
-
-    def _local_to_utc(self, date_local):
-        try:
-            date_local_tz = self.local_tz.localize(date_local)
-            date_local_tz_norm = self.local_tz.normalize(date_local_tz)
-            return date_local_tz_norm.astimezone(pytz.utc)
-        except Exception as e:
-            log.debug(e)
-            raise
-
-    def _format_date(self, date_input, offset=0, to_utc=False):
-        if not date_input:
-            return '*'
-
-        try:
-            local_dt = datetime.strptime(date_input, self.dateformat)
-            if to_utc:
-                return(self._local_to_utc(local_dt).strftime(self.dateformat))
-            else:
-                return(local_dt.strftime(self.dateformat))
-        except:
-            try:
-                return(datetime.strptime(date_input, "%Y-%m-%d").strftime(self.dateformat))
-            except:
-                raise oaipmh_error.BadArgumentError('Datestamp is expected one of the following formats: YYYY-MM-DDThh:mm:ssZ OR YYYY-MM-DD')
-
