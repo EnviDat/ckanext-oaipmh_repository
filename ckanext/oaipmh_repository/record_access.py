@@ -55,6 +55,8 @@ class RecordAccessService(object):
     def list_records(self, format, start_date=None, end_date=None, offset = 0):
         results, size = self.doi_solr.query(self.id_field, self.regex, start_date, end_date, offset, max_rows=self.max_results)
 
+        log.debug('list_records: got {0} out of {1} results'.format(size, len(results)))
+        
         if not results:
             raise oaipmh_error.NoRecordsMatchError()
 
@@ -65,7 +67,6 @@ class RecordAccessService(object):
             ckan_id = result['package_id']
             entity = result['entity']
             if entity == 'resource':
-                continue
                 ckan_id = result['resource_id']
             datestamp = result['datestamp']
 
