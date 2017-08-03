@@ -56,7 +56,7 @@ class RecordAccessService(object):
         results, size = self.doi_solr.query(self.id_field, self.regex, start_date, end_date, offset, max_rows=self.max_results)
 
         log.debug('list_records: got {0} out of {1} results'.format(size, len(results)))
-        
+
         if not results:
             raise oaipmh_error.NoRecordsMatchError()
 
@@ -94,7 +94,7 @@ class RecordAccessService(object):
 
         identifiers_list =  collections.OrderedDict()
         identifiers_list['header'] = []
-         
+
         for result in results.get('record',[]):
             identifiers_list['header'] += [result['header']]
 

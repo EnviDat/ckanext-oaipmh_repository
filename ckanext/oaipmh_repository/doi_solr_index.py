@@ -30,7 +30,7 @@ class DoiSolrNode(object):
             # CKAN 2.6
             decoder = simplejson.JSONDecoder(object_hook=self.solr_datetime_decoder)
             return pysolr.Solr(self.url, decoder=decoder)
-        
+
     def solr_datetime_decoder(self, d):
         for k, v in d.items():
             if isinstance(v, basestring):
@@ -47,7 +47,7 @@ class DoiSolrNode(object):
 									 date_values['minute'],
 									 date_values['second'])
         return d
-    
+
     def _solr_query(self, query_text, field_query, fields, max_rows, offset=0):
         results = []
         size = 0
