@@ -5,16 +5,11 @@ import util
 import logging
 log = logging.getLogger(__name__)
 
-try:
-    # CKAN 2.5
-    from solr import SolrConnection
-except:
-    # CKAN 2.6
-    import pysolr
-    import simplejson
-    import re
+import pysolr
+import simplejson
+import re
 
-class DoiSolrNode(object):
+class OAISolrIndex(object):
 
     def __init__(self, url, dateformat, local_tz='Europe/Berlin'):
         self.url = url
@@ -23,13 +18,8 @@ class DoiSolrNode(object):
 
     def _make_connection(self):
         assert self.url is not None
-        try:
-            # CKAN 2.5
-            return SolrConnection(self.url)
-        except:
-            # CKAN 2.6
-            decoder = simplejson.JSONDecoder(object_hook=self.solr_datetime_decoder)
-            return pysolr.Solr(self.url, decoder=decoder)
+        decoder = simplejson.JSONDecoder(object_hook=self.solr_datetime_decoder)
+        return pysolr.Solr(self.url, decoder=decoder)
 
     def solr_datetime_decoder(self, d):
         for k, v in d.items():
@@ -53,18 +43,11 @@ class DoiSolrNode(object):
         size = 0
 
         conn = self._make_connection()
-        if callable(getattr(conn, "query", None)):
-            # CKAN 2.5
-            response = conn.query(query_text, fq=field_query, fields = fields,
-                                  rows=max_rows, start=offset)
-            results = response.results
-            size = int(response.results.numFound)
-        else:
-            # CKAN 2.6
-            response = conn.search(query_text, fq=field_query, fields = fields,
+        
+        response = conn.search(query_text, fq=field_query, fields = fields,
                                        rows=max_rows, start=offset)
-            results = response.docs
-            size = int(response.hits)
+        results = response.docs
+        size = int(response.hits)
 
         return results,size
 
@@ -83,7 +66,7 @@ class DoiSolrNode(object):
                 query_text += ' metadata_modified:[{0} TO {1}]'.format(start_date_str, end_date_str)
 
             field_query = 'state:active capacity:public'
-            fields='package_id, resource_id, state, metadata_modified, entity, {0}, {1}'.format(field, 'extras_'+field)
+            fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field)
             results,size = self._solr_query(query_text, field_query, fields, max_rows, offset)
             # format the date
             for result in results:

@@ -1,61 +1,60 @@
 import ckan.lib.search.common as ckan_search
+from ckan.logic import get_action
+from ckantoolkit import config
+
 from ckanext.package_converter.model.metadata_format import MetadataFormats
 from ckanext.package_converter.model.record import JSONRecord, XMLRecord
 from ckanext.package_converter.logic import export_as_record
 import ckan.plugins.toolkit as toolkit
 
-from pylons import config
 import urllib
-
 from datetime import datetime
 import collections
 
 import oaipmh_error
-from doi_db_index import OAIPMHDOIIndex
-from doi_solr_index import DoiSolrNode
+import util
+from oai_solr_index import OAISolrIndex
 
 import logging
 log = logging.getLogger(__name__)
 
-import util
 
 class RecordAccessService(object):
 
-    def __init__(self, dateformat, id_prefix, id_field, regex, doi_solr_url, max_results = 1000, doi_index_params=[], local_tz='Europe/Berlin'):
+    def __init__(self, dateformat, id_prefix, id_field, regex, oai_solr_url, max_results = 1000, local_tz='Europe/Berlin'):
         self.dateformat = dateformat
         self.local_tz = local_tz
         self.id_prefix = id_prefix
         self.id_field = id_field
         self.regex = regex
+        self.oai_solr = OAISolrIndex(oai_solr_url, self.dateformat, self.local_tz)
         self.max_results = max_results
-        self.doi_index = None
-        if doi_index_params:
-            self.doi_index = OAIPMHDOIIndex(doi_index_params[0], doi_index_params[1])
-        self.doi_solr = DoiSolrNode(doi_solr_url, self.dateformat, self.local_tz)
+        self.ckan_dateformat = "%Y-%m-%dT%H:%M:%S.%f"        
 
+        
+ 
     def get_record(self, oai_identifier, format):
         # Get record
         value = self._get_ckan_field_value(oai_identifier)
-
-        results, size = self.doi_solr.query_by_field(self.id_field, value)
-
-        if not results:
+        
+        #results, size = self.doi_solr.query_by_field(self.id_field, value)
+        dataset = get_action('package_show')({}, {'id': value})
+        
+        if not dataset:
             raise oaipmh_error.IdDoesNotExistError()
-        else:
-            result = results[0]
 
-        ckan_id = result['package_id']
-        entity = result['entity']
-        if entity == 'resource':
-            ckan_id = result['resource_id']
-        datestamp = result['datestamp']
+        ckan_id = dataset['id']
+        entity = 'package'
+        datestamp = dataset['metadata_modified']
 
-        return(self._export_dataset(ckan_id, entity, oai_identifier, datestamp, format))
+        return(self._export_dataset(ckan_id, oai_identifier, datestamp, format))
 
     def list_records(self, format, start_date=None, end_date=None, offset = 0):
-        results, size = self.doi_solr.query(self.id_field, self.regex, start_date, end_date, offset, max_rows=self.max_results)
+    
+    
+        results, size = self.oai_solr.query(self.id_field, self.regex, start_date, end_date, offset, max_rows=self.max_results)
 
-        log.debug('list_records: got {0} out of {1} results'.format(size, len(results)))
+        log.debug('list_records: got {0} out of {1} results'.format(len(results), size))
 
         if not results:
             raise oaipmh_error.NoRecordsMatchError()
@@ -64,20 +63,15 @@ class RecordAccessService(object):
         record_list['record'] = []
 
         for result in results:
-            ckan_id = result['package_id']
-            entity = result['entity']
-            if entity == 'resource':
-                ckan_id = result['resource_id']
-            datestamp = result['datestamp']
+            ckan_id = result['id']
+            entity = 'package'
+            #if entity == 'resource':
+            #    ckan_id = result['resource_id']
+            datestamp = result['metadata_modified']
 
             oai_identifier = self._get_oaipmh_id(result.get(self.id_field))
 
-            if self.doi_index:
-                doi = result[self.id_field]
-                if not self.doi_index.check_doi(doi, ckan_id, entity):
-                    continue
-
-            record_list['record'] += [self._export_dataset(ckan_id, entity, oai_identifier, datestamp, format)['record']]
+            record_list['record'] += [self._export_dataset(ckan_id, oai_identifier, datestamp, format, entity)['record']]
 
         if size != len(results):
             token = self._get_ressumption_token(start_date, end_date, format, offset, len(results), size)
@@ -104,7 +98,9 @@ class RecordAccessService(object):
         return identifiers_list
 
 
-    def _export_dataset(self, ckan_id, entity, oai_identifier, datestamp, format):
+    def _export_dataset(self, ckan_id, oai_identifier, datestamp, format, entity='package'):
+        print "_export_dataset"
+        
         # Convert record
         try:
             converted_record = export_as_record(ckan_id, format, type=entity)
@@ -168,6 +164,13 @@ class RecordAccessService(object):
         # Header
         oaipmh_dict['header'] = collections.OrderedDict()
         oaipmh_dict['header']['identifier'] = identifier
-        oaipmh_dict['header']['datestamp'] = datestamp.strftime(self.dateformat)
+        
+        
+        # Convert CKAN Dateformat 2018-12-07T12:53:12.093092 to OAIPMH
+        datestamp_date = datestamp
+        if type(datestamp_date) is not datetime:
+            datestamp_date = datetime.strptime(datestamp, self.ckan_dateformat)
+                
+        oaipmh_dict['header']['datestamp'] = datestamp_date.strftime(self.dateformat)
 
         return oaipmh_dict

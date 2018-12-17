@@ -33,18 +33,19 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         self.id_prefix = config.get('oaipmh_repository.id_prefix', 'oai:ckan:id:')
         self.id_field = config.get('oaipmh_repository.id_field', 'name')
         self.regex = config.get('oaipmh_repository.regex', '*')
-        self.max_results = int(config.get('oaipmh_repository.max', '1000'))
-        self.doi_index_url = config.get('oaipmh_repository.sqlalchemy.url')
-        self.doi_index_site_id = config.get('oaipmh_repository.site_id')
+        self.max_results = int(config.get('oaipmh_repository.max', '10'))
+        #self.doi_index_url = config.get('oaipmh_repository.sqlalchemy.url', '')
+        #self.doi_index_site_id = config.get('oaipmh_repository.site_id')
         
-        doi_index_params = []
-        if (self.doi_index_url and self.doi_index_site_id):
-            doi_index_params = [self.doi_index_url, self.doi_index_site_id]
+        #doi_index_params = []
+        #if (self.doi_index_url and self.doi_index_site_id):
+        #    doi_index_params = [self.doi_index_url, self.doi_index_site_id]
 
-        self.doi_solr_url = config.get('oaipmh_repository.solr_url')
+        self.ckan_solr_url = config.get('solr_url')
 
-        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, self.id_field,
-                                                 self.regex, self.doi_solr_url, self.max_results, doi_index_params)
+        self.record_access = RecordAccessService(self.dateformat, self.id_prefix, 
+                                                 self.id_field, self.regex, 
+                                                 self.ckan_solr_url, self.max_results)
         log.debug(self)
 
     def handle_request(self, verb, params, url):
@@ -67,7 +68,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
             content = oaipmh_error.OAIPMHError(code,  message).as_xml_dict()
 
         xmldict = self._envelop(oaipmh_verb, params, url, content)
-
+        #print(xmldict)
         if not self._is_valid_oai_pmh_record(xmldict, metadata_prefix=params.get('metadataPrefix')):
             log.error('OAI-PMH Response Validation FAILED')
         else:
@@ -213,6 +214,10 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                        </xs:schema>'''.format(namespace=metadata_format.get_namespace(), schema=metadata_format.get_xsd_url())
             #log.debug(fixed_xsd)
             return(oai_pmh_record.validate(custom_xsd=fixed_xsd))
+            #return(True)
+        except Exception as e: 
+            print(e)
+            log.error('Failed to validate OAI-PMH for format {0}'.format(metadata_prefix))
         except:
             log.error('Failed to validate OAI-PMH for format {0}'.format(metadata_prefix))
             return False
@@ -231,17 +236,14 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                                       prefix = {id_prefix}, id_field = {id_field},
                                       verb_handlers = {handlers},
                                       max_results = {max_results},
-                                      doi_index_url = {doi_index_url},
-                                      doi_index_site_id = {doi_index_site_id},
-                                      doi_solr_url = {doi_solr_url}''').format(
+                                      ckan_solr_url = {ckan_solr_url}''').format(
                                       dateformat=self.dateformat,
                                       id_prefix=self.id_prefix,
                                       id_field=self.id_field,
                                       handlers=self.verb_handlers.keys(),
                                       max_results=self.max_results,
-                                      doi_index_url = ':'.join(self.doi_index_url.split(':')[0:2])+':***@' + self.doi_index_url.rsplit('@')[1],
-                                      doi_index_site_id = self.doi_index_site_id,
-                                      doi_solr_url = self.doi_solr_url)
+                                      ckan_solr_url=self.ckan_solr_url
+                                      )
 
 
 
