@@ -99,7 +99,6 @@ class RecordAccessService(object):
 
 
     def _export_dataset(self, ckan_id, oai_identifier, datestamp, format, entity='package'):
-        print "_export_dataset"
         
         # Convert record
         try:
