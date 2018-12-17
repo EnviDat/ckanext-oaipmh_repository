@@ -42,7 +42,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         #    doi_index_params = [self.doi_index_url, self.doi_index_site_id]
 
         self.ckan_solr_url = config.get('solr_url')
-        self.validate = config.get('oaipmh_repository.max', 'False')
+        self.validate = config.get('oaipmh_repository.validate', 'False')
 
         self.record_access = RecordAccessService(self.dateformat, self.id_prefix, 
                                                  self.id_field, self.regex, 
