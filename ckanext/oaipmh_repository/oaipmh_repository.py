@@ -1,5 +1,6 @@
 from pylons import config
 from ckan.lib.helpers import url_for
+
 from datetime import datetime
 
 from xmltodict import unparse
@@ -123,7 +124,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         params = self._validate_params_list(input_params)
         return(self.record_access.list_identifiers(params.get('metadataPrefix'),
                                                    params.get('from'),
-                                               	   params.get('until'),
+                                                   params.get('until'),
                                                    params.get('offset', 0)))
 
     def list_records(self, input_params):
@@ -202,13 +203,24 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         return oaipmh_dict
 
     def _is_valid_oai_pmh_record(self, xmldict, metadata_prefix=''):
+        site_url = config.get('ckan.site_url', '')
+
         if not metadata_prefix:
             metadata_prefix = 'oai_dc'
         try:
-            oai_pmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], unparse(xmldict))
+            xml_record = unparse(xmldict)
+
+            oai_pmh_record = XMLRecord(MetadataFormats().get_metadata_formats('oai_pmh')[0], xml_record)
 
             # get the format
             metadata_format = MetadataFormats().get_metadata_formats(metadata_prefix)[0]
+            metadata_schema = metadata_format.get_xsd_url()
+            
+            # local xsd for gcmd_dif (nasa hosted is not always available)
+            if metadata_prefix == 'gcmd_dif':
+                metadata_schema = metadata_schema.replace('http://gcmd.gsfc.nasa.gov/Aboutus/xml/dif/', site_url + '/package_converter_xsd/')
+            
+            print metadata_schema
             # modify xsd due to library bug
             fixed_xsd = '''<xs:schema xmlns="http://www.openarchives.org/OAI/2.0/"
                                   xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -216,10 +228,10 @@ class OAIPMHRepository(plugins.SingletonPlugin):
                                   xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" >
                            <xs:import namespace="http://www.openarchives.org/OAI/2.0/" schemaLocation="http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd" />
                            <xs:import namespace="{namespace}" schemaLocation="{schema}" />
-                       </xs:schema>'''.format(namespace=metadata_format.get_namespace(), schema=metadata_format.get_xsd_url())
-            #log.debug(fixed_xsd)
+                       </xs:schema>'''.format(namespace=metadata_format.get_namespace(), schema=metadata_schema)
+
             return(oai_pmh_record.validate(custom_xsd=fixed_xsd))
-            #return(True)
+            
         except Exception as e: 
             print(e)
             log.error('Failed to validate OAI-PMH for format {0}'.format(metadata_prefix))
