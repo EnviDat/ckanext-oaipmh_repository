@@ -42,6 +42,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         #    doi_index_params = [self.doi_index_url, self.doi_index_site_id]
 
         self.ckan_solr_url = config.get('solr_url')
+        self.validate = config.get('oaipmh_repository.max', 'False')
 
         self.record_access = RecordAccessService(self.dateformat, self.id_prefix, 
                                                  self.id_field, self.regex, 
@@ -69,12 +70,16 @@ class OAIPMHRepository(plugins.SingletonPlugin):
 
         xmldict = self._envelop(oaipmh_verb, params, url, content)
         #print(xmldict)
-        if not self._is_valid_oai_pmh_record(xmldict, metadata_prefix=params.get('metadataPrefix')):
-            log.error('OAI-PMH Response Validation FAILED')
+        if self.validate == "True":
+            if not self._is_valid_oai_pmh_record(xmldict, metadata_prefix=params.get('metadataPrefix')):
+                log.error('OAI-PMH Response Validation FAILED')
+            else:
+                log.debug('OAI-PMH Response Validation SUCCESS')
+                log.debug('OAI-PMH Response is error? = {0}'.format(self._is_error_oai_pmh_record(xmldict)))
         else:
-            log.debug('OAI-PMH Response Validation SUCCESS')
+            log.debug('OAI-PMH Response Validation SKIPPED')
             log.debug('OAI-PMH Response is error? = {0}'.format(self._is_error_oai_pmh_record(xmldict)))
-
+        
         return unparse(xmldict, pretty=True)
 
     def identify(self, params={}):
