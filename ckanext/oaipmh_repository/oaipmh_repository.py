@@ -36,8 +36,8 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         self.regex = config.get('oaipmh_repository.regex', '*')
         self.max_results = int(config.get('oaipmh_repository.max', '10'))
         #self.doi_index_url = config.get('oaipmh_repository.sqlalchemy.url', '')
-        #self.doi_index_site_id = config.get('oaipmh_repository.site_id')
-        
+        self.oai_repository_site_id = config.get('oaipmh_repository.site_id', 'repository')
+
         #doi_index_params = []
         #if (self.doi_index_url and self.doi_index_site_id):
         #    doi_index_params = [self.doi_index_url, self.doi_index_site_id]
@@ -88,7 +88,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
             raise oaipmh_error.BadArgumentError()
 
         identify_dict = collections.OrderedDict()
-        identify_dict['repositoryName'] = config.get('site.title') if config.get('site.title') else 'repository'
+        identify_dict['repositoryName'] = self.oai_repository_site_id
         identify_dict['baseURL'] = config.get('ckan.site_url') + url_for(controller='ckanext.oaipmh_repository.controller:OAIPMHController', action='index')
         identify_dict['protocolVersion'] = '2.0'
         identify_dict['adminEmail'] = config.get('email_to', 'admin@server.domain')
