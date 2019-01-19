@@ -38,14 +38,14 @@ class OAISolrIndex(object):
 									 date_values['second'])
         return d
 
-    def _solr_query(self, query_text, field_query, fields, max_rows, offset=0):
+    def _solr_query(self, query_text, field_query, fields, max_rows, offset=0, sort = "metadata_modified asc"):
         results = []
         size = 0
 
         conn = self._make_connection()
         
-        response = conn.search(query_text, fq=field_query, fields = fields,
-                                       rows=max_rows, start=offset)
+        response = conn.search(query_text, fq=field_query, fields=fields,
+                                       rows=max_rows, start=offset, sort=sort)
         results = response.docs
         size = int(response.hits)
 
@@ -65,7 +65,7 @@ class OAISolrIndex(object):
                 end_date_str = util.format_date(end_date, self.dateformat, self.local_tz, to_utc=True)
                 query_text += ' metadata_modified:[{0} TO {1}]'.format(start_date_str, end_date_str)
 
-            field_query = 'state:active capacity:public'
+            field_query = 'capacity:public state:(active OR deleted)'
             fields='id, state, metadata_modified, {0}, {1}'.format(field, 'extras_'+field)
             results,size = self._solr_query(query_text, field_query, fields, max_rows, offset)
             # format the date

@@ -1,6 +1,7 @@
 import ckan.lib.search.common as ckan_search
 from ckan.logic import get_action
 from ckantoolkit import config
+import ckan.model as model
 
 from ckanext.package_converter.model.metadata_format import MetadataFormats
 from ckanext.package_converter.model.record import JSONRecord, XMLRecord
@@ -30,16 +31,14 @@ class RecordAccessService(object):
         self.oai_solr = OAISolrIndex(oai_solr_url, self.dateformat, self.local_tz)
         self.max_results = max_results
         self.ckan_dateformat = "%Y-%m-%dT%H:%M:%S.%f"        
-
-        
  
     def get_record(self, oai_identifier, format):
         # Get record
         value = self._get_ckan_field_value(oai_identifier)
         
         #results, size = self.doi_solr.query_by_field(self.id_field, value)
-        dataset = get_action('package_show')({}, {'id': value})
-        
+        dataset = get_action('package_show')({ 'ignore_auth': True, 'validate': False }, {'id': value})
+
         if not dataset:
             raise oaipmh_error.IdDoesNotExistError()
 
@@ -51,7 +50,7 @@ class RecordAccessService(object):
 
     def list_records(self, format, start_date=None, end_date=None, offset = 0):
     
-    
+        # results 
         results, size = self.oai_solr.query(self.id_field, self.regex, start_date, end_date, offset, max_rows=self.max_results)
 
         log.debug('list_records: got {0} out of {1} results'.format(len(results), size))
@@ -68,10 +67,11 @@ class RecordAccessService(object):
             #if entity == 'resource':
             #    ckan_id = result['resource_id']
             datestamp = result['metadata_modified']
+            state = result['state']
 
             oai_identifier = self._get_oaipmh_id(result.get(self.id_field))
 
-            record_list['record'] += [self._export_dataset(ckan_id, oai_identifier, datestamp, format, entity)['record']]
+            record_list['record'] += [self._export_dataset(ckan_id, oai_identifier, datestamp, format, state, entity)['record']]
 
         if size != len(results):
             token = self._get_ressumption_token(start_date, end_date, format, offset, len(results), size)
@@ -98,7 +98,10 @@ class RecordAccessService(object):
         return identifiers_list
 
 
-    def _export_dataset(self, ckan_id, oai_identifier, datestamp, format, entity='package'):
+    def _export_dataset(self, ckan_id, oai_identifier, datestamp, format, state = 'active', entity='package'):
+        
+        if state != 'active':
+            return (self._envelop_record(oai_identifier, datestamp, {}, state))
         
         # Convert record
         try:
@@ -111,7 +114,7 @@ class RecordAccessService(object):
         if not record:
             raise oaipmh_error.CannotDisseminateFormatError()
 
-        return (self._envelop_record(oai_identifier, datestamp, record.get_xml_dict()))
+        return (self._envelop_record(oai_identifier, datestamp, record.get_xml_dict(), state))
 
     def _get_oaipmh_id(self, id):
         return('{prefix}{id}'.format(prefix=self.id_prefix, id=id))
@@ -144,20 +147,21 @@ class RecordAccessService(object):
 
        return ({'resumptionToken':token})
 
-    def _envelop_record(self, identifier, datestamp, content):
+    def _envelop_record(self, identifier, datestamp, content, state = 'active'):
         oaipmh_dict = collections.OrderedDict()
 
         # Header
-        oaipmh_dict['record'] = self._envelop_header(identifier, datestamp)
+        oaipmh_dict['record'] = self._envelop_header(identifier, datestamp, state)
 
         if not isinstance(content, dict):
             content = {'#text': str(content)}
         else:
-            oaipmh_dict['record']['metadata'] = content
+            if state == 'active':
+                oaipmh_dict['record']['metadata'] = content
 
         return oaipmh_dict
 
-    def _envelop_header(self, identifier, datestamp):
+    def _envelop_header(self, identifier, datestamp, state = 'active'):
         oaipmh_dict = collections.OrderedDict()
 
         # Header
@@ -172,4 +176,8 @@ class RecordAccessService(object):
                 
         oaipmh_dict['header']['datestamp'] = datestamp_date.strftime(self.dateformat)
 
+        # deleted records
+        if state != 'active':
+            oaipmh_dict['header']['@status'] = 'deleted'
+        
         return oaipmh_dict

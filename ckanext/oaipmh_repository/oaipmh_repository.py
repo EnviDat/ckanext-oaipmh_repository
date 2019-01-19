@@ -35,12 +35,9 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         self.id_field = config.get('oaipmh_repository.id_field', 'name')
         self.regex = config.get('oaipmh_repository.regex', '*')
         self.max_results = int(config.get('oaipmh_repository.max', '10'))
-        #self.doi_index_url = config.get('oaipmh_repository.sqlalchemy.url', '')
         self.oai_repository_site_id = config.get('oaipmh_repository.site_id', 'repository')
+        self.deleted_record = config.get('oaipmh_repository.deleted_record', 'no')
 
-        #doi_index_params = []
-        #if (self.doi_index_url and self.doi_index_site_id):
-        #    doi_index_params = [self.doi_index_url, self.doi_index_site_id]
 
         self.ckan_solr_url = config.get('solr_url')
         self.validate = config.get('oaipmh_repository.validate', 'False')
@@ -93,7 +90,7 @@ class OAIPMHRepository(plugins.SingletonPlugin):
         identify_dict['protocolVersion'] = '2.0'
         identify_dict['adminEmail'] = config.get('email_to', 'admin@server.domain')
         identify_dict['earliestDatestamp'] = datetime(2004, 1, 1).strftime(self.dateformat)
-        identify_dict['deletedRecord'] = 'no'
+        identify_dict['deletedRecord'] = self.deleted_record
         identify_dict['granularity'] ='YYYY-MM-DD'
         return identify_dict
 
