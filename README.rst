@@ -41,8 +41,7 @@ ckanext-oaipmh_repository
 Requirements
 ------------
 
-For example, you might want to mention here which versions of CKAN this
-extension works with.
+Developed for CKAN 2.8. Depends on ckanext-scheming, ckanext-composite and ckanext-package_converter
 
 
 ------------
