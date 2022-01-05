@@ -92,7 +92,7 @@ do::
     git clone https://github.com/espona/ckanext-oaipmh_repository.git
     cd ckanext-oaipmh_repository
     python setup.py develop
-    pip install -r dev-requirements.txt
+    pip install -r requirements.txt
 
 
 -----------------
