@@ -1,2 +1,2 @@
-include README.rst
+include README.rst requirements.txt
 recursive-include ckanext/oaipmh_repository *.html *.json *.js *.less *.css *.mo
