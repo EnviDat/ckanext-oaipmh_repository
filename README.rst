@@ -1,40 +1,16 @@
-.. You should enable this project on travis-ci.org and coveralls.io to make
-   these badges work. The necessary Travis and Coverage config files have been
-   generated for you.
-
-.. image:: https://travis-ci.org/espona/ckanext-oaipmh_repository.svg?branch=master
-    :target: https://travis-ci.org/espona/ckanext-oaipmh_repository
-
-.. image:: https://coveralls.io/repos/espona/ckanext-oaipmh_repository/badge.svg
-  :target: https://coveralls.io/r/espona/ckanext-oaipmh_repository
-
-.. image:: https://pypip.in/download/ckanext-oaipmh_repository/badge.svg
-    :target: https://pypi.python.org/pypi//ckanext-oaipmh_repository/
-    :alt: Downloads
-
-.. image:: https://pypip.in/version/ckanext-oaipmh_repository/badge.svg
-    :target: https://pypi.python.org/pypi/ckanext-oaipmh_repository/
-    :alt: Latest Version
-
-.. image:: https://pypip.in/py_versions/ckanext-oaipmh_repository/badge.svg
-    :target: https://pypi.python.org/pypi/ckanext-oaipmh_repository/
-    :alt: Supported Python versions
-
-.. image:: https://pypip.in/status/ckanext-oaipmh_repository/badge.svg
-    :target: https://pypi.python.org/pypi/ckanext-oaipmh_repository/
-    :alt: Development Status
-
-.. image:: https://pypip.in/license/ckanext-oaipmh_repository/badge.svg
-    :target: https://pypi.python.org/pypi/ckanext-oaipmh_repository/
-    :alt: License
-
 =============
 ckanext-oaipmh_repository
 =============
 
-.. Put a description of your extension here:
-   What does it do? What features does it have?
-   Consider including some screenshots or embedding a video!
+Converted EnviDat datasets to dcat-ap format harvested by opendata.swiss.
+
+----------
+DEPRECATED
+----------
+
+This extension has been replaced by the
+`envidat-converters-api <https://gitlabext.wsl.ch/EnviDat/envidat-converters-api>`_
+microservice.
 
 
 ------------
